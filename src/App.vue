@@ -248,8 +248,7 @@ const joinOrCreateRoom = async () => {
           p_room_id: roomId.value,
           p_player_id: playerId.value,
           p_name: String(playerName.value),
-          p_hp: Number(initialHp.value),
-          p_max_players: Number(maxPlayers.value)
+          p_hp: Number(initialHp.value)
         })
         if (pError || !joined) {
           console.error('Player insert error:', pError)
@@ -300,8 +299,7 @@ const joinOrCreateRoom = async () => {
         p_room_id: newRoom.id,
         p_player_id: playerId.value,
         p_name: String(playerName.value),
-        p_hp: Number(newRoom.initial_hp || initialHp.value),
-        p_max_players: Number(maxPlayers.value)
+        p_hp: Number(newRoom.initial_hp || initialHp.value)
       })
       
       if (pError || !joined) {
