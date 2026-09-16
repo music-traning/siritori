@@ -178,11 +178,20 @@ onMounted(async () => {
   if (room) {
     roomId.value = room
     isRecovering.value = true
-    const success = await recoverGameState(room)
-    if (!success) {
-      alert('部屋に復帰できませんでした（退出済みか満室です）💦')
-      roomId.value = null
-      window.history.replaceState({}, '', '/')
+    
+    // 自分がすでに部屋にいるか確認
+    await fetchRoomData(room)
+    const isAlreadyInRoom = playersList.value.some(p => p.id === playerId.value)
+
+    if (isAlreadyInRoom) {
+      const success = await recoverGameState(room)
+      if (!success) {
+        alert('部屋に復帰できませんでした（退出済みか満室です）💦')
+        roomId.value = null
+        window.history.replaceState({}, '', '/')
+        currentMode.value = 'join'
+      }
+    } else {
       currentMode.value = 'join'
     }
     isRecovering.value = false
