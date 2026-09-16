@@ -291,8 +291,8 @@ const fetchRoomData = async (id) => {
 }
 
 const setupRealtimeSubscription = (id) => {
-  // Listen to Rooms
-  supabase.channel(`rooms-${id}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${id}` }, async (payload) => {
+  // Listen to Rooms (変数 roomChannel に格納)
+  const roomChannel = supabase.channel(`rooms-${id}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${id}` }, async (payload) => {
     const room = payload.new
     
     // Status change
@@ -325,8 +325,8 @@ const setupRealtimeSubscription = (id) => {
     targetLetter.value = room.current_char || targetLetter.value
   }).subscribe()
 
-  // Listen to Players
-  supabase.channel(`players-${id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${id}` }, (payload) => {
+  // Listen to Players (変数 playerChannel に格納)
+  const playerChannel = supabase.channel(`players-${id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${id}` }, (payload) => {
     if (payload.eventType === 'INSERT') {
       if (!playersList.value.find(p => p.id === payload.new.id)) {
         playersList.value.push(payload.new)
@@ -340,8 +340,8 @@ const setupRealtimeSubscription = (id) => {
     }
   }).subscribe()
 
-  // Listen to Words
-  supabase.channel(`words-${id}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'words', filter: `room_id=eq.${id}` }, (payload) => {
+  // Listen to Words (変数 wordChannel に格納)
+  const wordChannel = supabase.channel(`words-${id}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'words', filter: `room_id=eq.${id}` }, (payload) => {
     const word = payload.new
     if (word.detected_word === latestMyWord.value) {
       latestMyWord.value = '' // clear
@@ -370,6 +370,9 @@ const setupRealtimeSubscription = (id) => {
       if (videoRef.value && isMyTurn.value) videoRef.value.play()
     }
   }).subscribe()
+
+  // 【追加】作成した3つのチャンネルを配列に保存し、unmount時に破棄できるようにする
+  activeChannels.push(roomChannel, playerChannel, wordChannel)
 }
 
 // --- Gameplay Logic ---
@@ -678,15 +681,6 @@ const handleAction = async () => {
       isProcessingGameOver.value = false
     }
   }
-}
-
-const passTurn = async () => {
-  await supabase.rpc('update_room_turn', { 
-    p_room_id: roomId.value, 
-    p_player_id: playerId.value,
-    p_turn_index: getNextTurnIndex(currentTurnIndex.value),
-    p_next_char: targetLetter.value
-  })
 }
 
 const passMyTurn = async () => {
@@ -1044,10 +1038,6 @@ const goBackToTop = () => {
             <div v-if="!isMyTurn && currentState !== 'processing' && (playersList.find(p => p.id === playerId)?.hp || 0) > 0" class="absolute inset-0 bg-slate-800/80 flex flex-col items-center justify-center z-10 p-4">
               <div class="w-16 h-16 mb-4 rounded-full bg-cyan-400 border-2 border-white flex items-center justify-center text-3xl animate-bounce">👀</div>
               <p class="text-white text-lg">{{ activePlayer?.name }} の判定待ち...</p>
-              <!-- Pass button -->
-              <button @click="passTurn" class="mt-6 px-4 py-2 bg-slate-600 text-white text-sm rounded-full border-2 border-slate-500 hover:bg-slate-500 transition-colors">
-                順番を飛ばす（パス）⏭️
-              </button>
             </div>
 
             <div v-if="currentState === 'processing'" class="absolute inset-0 bg-slate-800/40 backdrop-blur-sm flex items-center justify-center z-20">
