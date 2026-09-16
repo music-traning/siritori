@@ -47,6 +47,15 @@ const chatData = ref({
   text: '準備中...✨',
   image: null
 })
+const wordAnimationData = ref(null)
+const triggerWordAnimation = (word, reading) => {
+  wordAnimationData.value = { word, reading }
+  setTimeout(() => {
+    if (wordAnimationData.value?.word === word) {
+      wordAnimationData.value = null
+    }
+  }, 2500)
+}
 const turnCount = ref(0)
 const latestMyWord = ref('')
 const gameOverData = ref(null)
@@ -691,6 +700,7 @@ const setupRealtimeSubscription = (id) => {
         playerId: word.player_id,
         wordId: word.id
       }
+      triggerWordAnimation(word.detected_word, word.reading)
       currentState.value = 'initial'
       capturedImage.value = null
       if (videoRef.value && isMyTurn.value) videoRef.value.play()
@@ -965,6 +975,7 @@ const handleAction = async () => {
       await supabase.rpc('update_room_status', { p_room_id: roomId.value, p_status: 'gameover' })
     } else if (result.is_valid) {
       playSuccess()
+      triggerWordAnimation(result.detected_word, result.reading)
       latestMyWord.value = result.detected_word
       
       let uploadedUrl = null;
@@ -1472,6 +1483,14 @@ const goBackToTop = async () => {
               <div class="bg-slate-900/90 text-white text-xs sm:text-sm font-bold px-4 py-3 rounded-2xl shadow-lg border border-slate-700 flex items-center gap-2">
                 <span>⚠️</span>
                 <span>他人や個人情報が写り込まないよう注意してね📸</span>
+              </div>
+            </div>
+
+            <!-- Word Animation Overlay -->
+            <div v-if="wordAnimationData" class="absolute inset-0 flex flex-col items-center justify-center z-[60] pointer-events-none px-4 drop-shadow-2xl">
+              <div class="bg-white/95 px-8 py-6 rounded-3xl border-4 border-cyan-400 transform -rotate-3 text-center shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] animate-fade-in-up">
+                <p class="text-sm font-black text-slate-500 tracking-widest mb-1">{{ wordAnimationData.reading }}</p>
+                <p class="text-5xl font-black text-slate-800 tracking-wider">『{{ wordAnimationData.word }}』</p>
               </div>
             </div>
             
