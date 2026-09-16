@@ -128,7 +128,17 @@ const startTurnTimeout = () => {
             
             const hpSuccess = await safeUpdatePlayerHp(activePlayer.value.id, expectedHp, newHp, roomId.value)
             if (hpSuccess) {
-              await safeUpdateRoomTurn(roomId.value, expectedTurn, expectedTurn + 1, targetLetter.value)
+              const targetPlayerInList = playersList.value.find(p => p.id === activePlayer.value.id)
+              if (targetPlayerInList) targetPlayerInList.hp = newHp
+
+              let isOver = false
+              if (newHp <= 0) {
+                isOver = await checkWinCondition()
+              }
+              
+              if (!isOver) {
+                await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
+              }
             }
           }
         }
@@ -876,8 +886,9 @@ const setupRealtimeSubscription = (id) => {
           const currentState = presenceChannel.presenceState()
           const currentOnlineIds = Object.keys(currentState)
           if (!currentOnlineIds.includes(p.id)) {
-            // Found a ghost -> Delete
-            supabase.from('players').delete().eq('id', p.id).then()
+            // Found a ghost -> set room_id to null and manually remove from UI
+            supabase.from('players').update({ room_id: null, is_ready: false }).eq('id', p.id).then()
+            playersList.value = playersList.value.filter(player => player.id !== p.id)
           }
         }, 3000)
       }
