@@ -12,6 +12,7 @@ const roomShareEnabled = ref(false)
 const hasPlayedGameOverSound = ref(false)
 const isJoining = ref(false)
 const isAgreed = ref(false)
+const isPublicRoom = ref(false)
 
 const playGameOver = () => {
   if (hasPlayedGameOverSound.value) return
@@ -333,6 +334,7 @@ const fetchRoomData = async (id) => {
     targetLetter.value = roomData.current_char || 'あ'
     currentTurnIndex.value = roomData.current_turn_index || 0
     roomShareEnabled.value = !!roomData.is_image_share_enabled
+    isPublicRoom.value = !!roomData.is_public
     roomDifficulty.value = roomData.difficulty || 'normal'
     initialHp.value = roomData.initial_hp || 3
     chatData.value = { text: `さあ、何撮る？まずは『${targetLetter.value}』から始まるもの見つけてよ😁`, image: null }
@@ -976,8 +978,9 @@ const goBackToTop = () => {
             <li v-if="playersList.length === 0" class="text-center text-slate-400 text-sm py-4">読み込み中...</li>
           </ul>
         </div>
-        
-        <p v-if="!isHost" class="text-slate-500 text-sm animate-pulse mt-4">ホストが開始するのを待っています...</p>
+        <p v-if="isPublicRoom && playersList.length < 2" class="text-slate-500 text-sm animate-pulse mt-4">他のプレイヤーを待っています...（2人以上でスタート可能！）</p>
+        <p v-else-if="isPublicRoom && playersList.length >= 2" class="text-pink-500 font-bold text-sm animate-pulse mt-4">準備ができたらスタートボタンを押してください！</p>
+        <p v-else-if="!isHost" class="text-slate-500 text-sm animate-pulse mt-4">ホストが開始するのを待っています...</p>
         
         <div class="w-full flex flex-col gap-2 mt-4">
           <button 
@@ -988,9 +991,9 @@ const goBackToTop = () => {
           </button>
           
           <button 
-            v-if="isHost"
+            v-if="isHost || isPublicRoom"
             @click="startGame"
-            :disabled="playersList.length < 1"
+            :disabled="isPublicRoom ? playersList.length < 2 : playersList.length < 1"
             class="w-full py-4 rounded-2xl text-xl text-white bg-pink-500 hover:bg-pink-400 shadow-[0_6px_0_0_#be185d] transition-all duration-150 active:shadow-none active:translate-y-[6px] disabled:opacity-50 disabled:shadow-none disabled:translate-y-[6px]"
           >
             ゲームスタート！✨
