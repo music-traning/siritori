@@ -10,6 +10,7 @@ const roomStatus = ref('waiting')
 const hostId = ref(null)
 const roomShareEnabled = ref(false)
 const hasPlayedGameOverSound = ref(false)
+const isJoining = ref(false)
 
 const playGameOver = () => {
   if (hasPlayedGameOverSound.value) return
@@ -47,7 +48,7 @@ const canvasRef = ref(null)
 const stream = ref(null)
 const capturedImage = ref(null)
 
-const hiraganaList = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわを".split('')
+const hiraganaList = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわو".split('')
 
 // Computed
 const activePlayer = computed(() => {
@@ -124,92 +125,117 @@ onUnmounted(async () => {
 
 // --- Join & Lobby Logic ---
 const joinOrCreateRoom = async () => {
-  initAudio()
-  if (!playerName.value.trim()) return
-  if (playerName.value.length > 10) return
+  if (isJoining.value) return
+  isJoining.value = true
   
-  localStorage.setItem('shiritori_player_name', playerName.value)
-
-  if (roomId.value) {
-    // Join existing room
-    await fetchRoomData(roomId.value)
-    if (!hostId.value) {
-      alert('部屋が見つかりません😢')
-      return
-    }
+  try {
+    initAudio()
+    if (!playerName.value.trim()) return
+    if (playerName.value.length > 10) return
     
-    // Check if already in room
-    let myPlayer = playersList.value.find(p => p.id === playerId.value)
-    if (!myPlayer) {
-      const { data: joined, error: pError } = await supabase.rpc('join_room', {
-        p_room_id: roomId.value,
-        p_player_id: playerId.value,
-        p_name: String(playerName.value),
-        p_hp: Number(initialHp.value)
-      })
-      if (pError || !joined) {
-        console.error('Player insert error:', pError)
-        alert('満室または参加エラーが発生しました💦')
+    localStorage.setItem('shiritori_player_name', playerName.value)
+
+    if (roomId.value) {
+      // Join existing room
+      await fetchRoomData(roomId.value)
+      if (!hostId.value) {
+        alert('部屋が見つかりません😢')
         return
       }
       
+      // Check if already in room
+      let myPlayer = playersList.value.find(p => p.id === playerId.value)
+      if (!myPlayer) {
+        const { data: joined, error: pError } = await supabase.rpc('join_room', {
+          p_room_id: roomId.value,
+          p_player_id: playerId.value,
+          p_name: String(playerName.value),
+          p_hp: Number(initialHp.value)
+        })
+        if (pError || !joined) {
+          console.error('Player insert error:', pError)
+          alert('満室または参加エラーが発生しました💦')
+          return
+        }
+        
+        localStorage.setItem('shiritori_player_id', playerId.value)
+        
+        // ユーザー指示: 再度 SELECT を行い自身のプレイヤー情報を取得しローカルにセット
+        const { data: fetchedPlayer, error: fetchErr } = await supabase.from('players').select('*').eq('id', playerId.value).single()
+        if (fetchErr) {
+          console.error('Player fetch error:', fetchErr)
+        } else if (fetchedPlayer) {
+          playersList.value.push(fetchedPlayer)
+        }
+        
+        // Refetch to get the updated list and order
+        await fetchRoomData(roomId.value)
+      }
+      setupRealtimeSubscription(roomId.value)
+      currentMode.value = roomStatus.value === 'playing' ? 'play' : 'lobby'
+      if (currentMode.value === 'play') startCamera()
+    } else {
+      // Create new room (Host)
+      const randomChar = hiraganaList[Math.floor(Math.random() * hiraganaList.length)]
+      const newRoomId = crypto.randomUUID()
+      
+      const { data: newRoom, error } = await supabase.from('rooms').insert([{ 
+        id: newRoomId,
+        current_char: randomChar,
+        is_image_share_enabled: Boolean(isImageShareEnabled.value),
+        status: 'waiting',
+        current_turn_index: 0,
+        host_id: playerId.value,
+        difficulty: String(difficulty.value),
+        initial_hp: Number(initialHp.value)
+      }]).select().single()
+
+      if (error || !newRoom) {
+        console.error('Room creation error:', error)
+        alert('部屋の作成に失敗しました😢')
+        return
+      }
+
+      const { data: joined, error: pError } = await supabase.rpc('join_room', {
+        p_room_id: newRoom.id,
+        p_player_id: playerId.value,
+        p_name: String(playerName.value),
+        p_hp: Number(newRoom.initial_hp || initialHp.value)
+      })
+      
+      if (pError || !joined) {
+        console.error('Player insert error:', pError)
+        alert('プレイヤー作成に失敗しました😢')
+        return
+      }
+
+      const { data: fetchedPlayer, error: fetchErr } = await supabase.from('players').select('*').eq('id', playerId.value).single()
+      if (fetchErr) {
+        console.error('Player fetch error:', fetchErr)
+      } else if (fetchedPlayer) {
+        playersList.value = [fetchedPlayer]
+      }
+
+      roomId.value = newRoom.id
       localStorage.setItem('shiritori_player_id', playerId.value)
-      // Refetch to get the updated list and order
-      await fetchRoomData(roomId.value)
+      hostId.value = playerId.value
+      roomStatus.value = 'waiting'
+      targetLetter.value = newRoom.current_char
+      roomShareEnabled.value = newRoom.is_image_share_enabled
+      roomDifficulty.value = newRoom.difficulty || difficulty.value
+      initialHp.value = newRoom.initial_hp || initialHp.value
+      chatData.value = { text: `さあ、何撮るの？ はやく『${targetLetter.value}』から始まるもの見つけてよ😏`, image: null }
+
+      await fetchRoomData(newRoom.id)
+
+      window.history.pushState({}, '', `/?room=${newRoom.id}`)
+      setupRealtimeSubscription(newRoom.id)
+      currentMode.value = 'lobby'
     }
-    setupRealtimeSubscription(roomId.value)
-    currentMode.value = roomStatus.value === 'playing' ? 'play' : 'lobby'
-    if (currentMode.value === 'play') startCamera()
-  } else {
-    // Create new room (Host)
-    const randomChar = hiraganaList[Math.floor(Math.random() * hiraganaList.length)]
-    const newRoomId = crypto.randomUUID()
-    
-    const { data: newRoom, error } = await supabase.from('rooms').insert([{ 
-      id: newRoomId,
-      current_char: randomChar,
-      is_image_share_enabled: Boolean(isImageShareEnabled.value),
-      status: 'waiting',
-      current_turn_index: 0,
-      host_id: playerId.value, // Temporary, will update
-      difficulty: String(difficulty.value),
-      initial_hp: Number(initialHp.value)
-    }]).select().single()
-
-    if (error || !newRoom) {
-      console.error('Room creation error:', error)
-      alert('部屋の作成に失敗しました😢')
-      return
-    }
-
-    const { data: joined, error: pError } = await supabase.rpc('join_room', {
-      p_room_id: newRoom.id,
-      p_player_id: playerId.value,
-      p_name: String(playerName.value),
-      p_hp: Number(newRoom.initial_hp || initialHp.value)
-    })
-    
-    if (pError || !joined) {
-      console.error('Player insert error:', pError)
-      alert('プレイヤー作成に失敗しました😢')
-      return
-    }
-
-    roomId.value = newRoom.id
-    localStorage.setItem('shiritori_player_id', playerId.value)
-    hostId.value = playerId.value
-    roomStatus.value = 'waiting'
-    targetLetter.value = newRoom.current_char
-    roomShareEnabled.value = newRoom.is_image_share_enabled
-    roomDifficulty.value = newRoom.difficulty || difficulty.value
-    initialHp.value = newRoom.initial_hp || initialHp.value
-    chatData.value = { text: `さあ、何撮るの？ はやく『${targetLetter.value}』から始まるもの見つけてよ😏`, image: null }
-
-    await fetchRoomData(newRoom.id)
-
-    window.history.pushState({}, '', `/?room=${newRoom.id}`)
-    setupRealtimeSubscription(newRoom.id)
-    currentMode.value = 'lobby'
+  } catch (error) {
+    console.error('Join room error:', error)
+  } finally {
+    isJoining.value = false
   }
 }
 
@@ -848,11 +874,12 @@ const goBackToTop = () => {
 
           <button 
             @click="joinOrCreateRoom"
-            :disabled="!playerName.trim()"
+            :disabled="!playerName.trim() || isJoining"
             class="w-full py-4 mt-2 rounded-2xl text-xl text-slate-800 shadow-[0_6px_0_0_#ca8a04] transition-all duration-150 disabled:opacity-50 disabled:shadow-none disabled:translate-y-[6px]"
             :class="!roomId ? 'bg-yellow-400 hover:bg-yellow-300 active:shadow-[0_0px_0_0_#ca8a04] active:translate-y-[6px]' : 'bg-cyan-400 hover:bg-cyan-300 text-white shadow-[0_6px_0_0_#0891b2] active:shadow-[0_0px_0_0_#0891b2] active:translate-y-[6px]'"
           >
-            {{ !roomId ? '友達と部屋を作る✨' : '部屋に参加する！🏃‍♂️' }}
+            <span v-if="isJoining">通信中...</span>
+            <span v-else>{{ !roomId ? '部屋を作る' : '部屋に参加' }}</span>
           </button>
         </div>
         <footer class="mt-8 text-center">
