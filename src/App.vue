@@ -740,9 +740,22 @@ const setupRealtimeSubscription = (id) => {
     const room = payload.new
     
     // Status change
-    if (room.status === 'playing' && currentMode.value === 'lobby') {
-      currentMode.value = 'play'
-      startCamera()
+    if (room.status === 'playing') {
+      if (currentMode.value === 'lobby') {
+        currentMode.value = 'play'
+        startCamera()
+      } else if (currentState.value === 'gameover' || currentState.value === 'clear') {
+        currentMode.value = 'play'
+        turnCount.value = 0
+        targetLetter.value = room.current_char || 'あ'
+        currentState.value = 'initial'
+        isProcessingGameOver.value = false
+        hasPlayedGameOverSound.value = false
+        chatData.value = { text: `レディー・ゴー！まずは「${targetLetter.value}」から始まる言葉を見つけてね🔍`, image: null }
+        capturedImage.value = null
+        if (videoRef.value) videoRef.value.play()
+        else startCamera()
+      }
     } else if (room.status === 'gameover' && !isProcessingGameOver.value) {
       isProcessingGameOver.value = true
       // Sync game over state for those who didn't trigger it
@@ -780,6 +793,9 @@ const setupRealtimeSubscription = (id) => {
       const idx = playersList.value.findIndex(p => p.id === payload.new.id)
       if (idx !== -1) {
         playersList.value[idx] = payload.new
+      } else {
+        playersList.value.push(payload.new)
+        playersList.value.sort((a, b) => a.order_index - b.order_index)
       }
     } else if (payload.eventType === 'DELETE') {
       playersList.value = playersList.value.filter(p => p.id !== payload.old.id)
@@ -1256,20 +1272,11 @@ const surrender = async () => {
 
 const resetGame = async () => {
   if (isHost.value) {
-    const updates = playersList.value.map(p => supabase.rpc('update_player_hp', { p_player_id: p.id, p_new_hp: initialHp.value }))
+    const updates = playersList.value.map(p => supabase.rpc('update_player_hp', { p_player_id: p.id, p_new_hp: Number(initialHp.value) }))
     await Promise.all(updates)
     
     await supabase.rpc('reset_room', { p_room_id: roomId.value, p_host_id: playerId.value })
   }
-  turnCount.value = 0
-  targetLetter.value = 'あ'
-  currentState.value = 'initial'
-  isProcessingGameOver.value = false
-  hasPlayedGameOverSound.value = false
-  chatData.value = { text: 'さあ、何撮る？またはやく『あ』から始まるもの見つけてよ😁', image: null }
-  capturedImage.value = null
-  if (videoRef.value) videoRef.value.play()
-  else startCamera()
 }
 
 const retry = () => {
