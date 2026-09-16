@@ -573,7 +573,7 @@ const handleAction = async () => {
     if (!response.ok) throw new Error('API request failed')
     const result = await response.json()
 
-    if (result.is_game_over) {
+    if (result.is_game_over || result.reading?.endsWith('ん') || result.next_char === 'ん') {
       if (isProcessingGameOver.value) return
       isProcessingGameOver.value = true
       playGameOver()
