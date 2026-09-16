@@ -1169,6 +1169,13 @@ const goBackToTop = async () => {
           >
             ゲームスタート！✨
           </button>
+
+          <button 
+            @click="goBackToTop"
+            class="w-full py-3 mt-2 rounded-2xl text-lg text-slate-500 bg-transparent hover:bg-slate-100 transition-all duration-150"
+          >
+            退出する 🚪
+          </button>
         </div>
       </div>
     </template>
