@@ -638,7 +638,12 @@ const safeUpdateRoomTurn = async (id, expectedIndex, newIndex, nextChar) => {
     p_new_turn_index: newIndex,
     p_next_char: nextChar
   })
-  if (error || !success) {
+  if (error) {
+    console.error('update_room_turn_optimistic RPC error:', { error, p_room_id: id, p_expected: expectedIndex, p_new: newIndex })
+    await fetchRoomData(id)
+    return false
+  }
+  if (!success) {
     console.warn('Turn update rejected (conflict). Syncing state...')
     await fetchRoomData(id)
     return false
@@ -652,7 +657,12 @@ const safeUpdatePlayerHp = async (pId, expectedHp, newHp, rId) => {
     p_expected_hp: expectedHp,
     p_new_hp: newHp
   })
-  if (error || !success) {
+  if (error) {
+    console.error('update_player_hp_optimistic RPC error:', { error, p_player_id: pId, p_expected: expectedHp, p_new: newHp })
+    await fetchRoomData(rId)
+    return false
+  }
+  if (!success) {
     console.warn('HP update rejected (conflict). Syncing state...')
     await fetchRoomData(rId)
     return false
@@ -666,7 +676,12 @@ const safeUpdateRoomStatus = async (id, expectedStatus, newStatus) => {
     p_expected_status: expectedStatus,
     p_new_status: newStatus
   })
-  if (error || !success) {
+  if (error) {
+    console.error('update_room_status_optimistic RPC error:', { error, p_room_id: id, p_expected: expectedStatus, p_new: newStatus })
+    await fetchRoomData(id)
+    return false
+  }
+  if (!success) {
     console.warn('Status update rejected (conflict). Syncing state...')
     await fetchRoomData(id)
     return false
