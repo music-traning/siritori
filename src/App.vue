@@ -3,6 +3,7 @@ import { ref, computed, onMounted, nextTick, watch, onUnmounted } from 'vue'
 import { supabase } from './supabase'
 import { initAudio, playShutter, playSuccess, playFailure, playGameOver as _playGameOver } from './audio'
 import RulesModal from './components/RulesModal.vue'
+import HowToPlayModal from './components/HowToPlayModal.vue'
 import ReportModal from './components/ReportModal.vue'
 import PrivacyPolicyModal from './components/PrivacyPolicyModal.vue'
 import AdminPanel from './components/AdminPanel.vue'
@@ -13,6 +14,7 @@ const isAdminMode = computed(() => {
 })
 
 const showRulesModal = ref(false)
+const showHowToPlayModal = ref(false)
 const showPrivacyPolicyModal = ref(false)
 const showReportModal = ref(false)
 const reportTarget = ref(null)
@@ -1399,6 +1401,7 @@ const goBackToTop = async () => {
 
     <!-- JOIN SCREEN -->
     <template v-if="currentMode === 'join'">
+      <button @click="showHowToPlayModal = true" class="absolute top-4 right-4 z-50 bg-white border-2 border-slate-800 rounded-full px-4 py-1.5 text-sm font-bold shadow-[0_4px_0_0_#1e293b] active:shadow-none active:translate-y-[4px] text-slate-700 transition-all flex items-center gap-1"><span>📖</span>遊び方</button>
       <div class="z-10 flex flex-col items-center justify-center flex-1 w-full gap-8 my-auto py-4">
         <h1 class="text-4xl text-slate-800 drop-shadow-sm tracking-wide text-center leading-tight">
           レンズしりとり<br><span class="text-cyan-500 text-5xl">オンライン</span>
@@ -1786,6 +1789,7 @@ const goBackToTop = async () => {
     
     <!-- MODALS -->
     <RulesModal :isOpen="showRulesModal" @close="showRulesModal = false" />
+    <HowToPlayModal :isOpen="showHowToPlayModal" @close="showHowToPlayModal = false" />
     <PrivacyPolicyModal :isOpen="showPrivacyPolicyModal" @close="showPrivacyPolicyModal = false" />
     <ReportModal :isOpen="showReportModal" @close="showReportModal = false" @submit="handleReportSubmit" />
   </div>
