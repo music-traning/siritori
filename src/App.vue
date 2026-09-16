@@ -1,11 +1,19 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, watch, onUnmounted } from 'vue'
 import { supabase } from './supabase'
 import { initAudio, playShutter, playSuccess, playFailure, playGameOver as _playGameOver } from './audio'
 import RulesModal from './components/RulesModal.vue'
 import ReportModal from './components/ReportModal.vue'
+import PrivacyPolicyModal from './components/PrivacyPolicyModal.vue'
+import AdminPanel from './components/AdminPanel.vue'
+
+const isAdminMode = computed(() => {
+  const urlParams = new URLSearchParams(window.location.search)
+  return urlParams.has('admin')
+})
 
 const showRulesModal = ref(false)
+const showPrivacyPolicyModal = ref(false)
 const showReportModal = ref(false)
 const reportTarget = ref(null)
 const showCameraWarning = ref(false)
@@ -19,6 +27,7 @@ const roomShareEnabled = ref(false)
 const hasPlayedGameOverSound = ref(false)
 const isJoining = ref(false)
 const isAgreed = ref(false)
+const isPrivacyAgreed = ref(false)
 const isPublicRoom = ref(false)
 
 const playGameOver = () => {
@@ -262,7 +271,7 @@ watch([currentMode, currentState], ([newMode, newState]) => {
       showCameraWarning.value = true
       setTimeout(() => {
         showCameraWarning.value = false
-      }, 4000)
+      }, 6000)
       localStorage.setItem('shiritori_camera_warning_shown', '1')
     }
   }
@@ -330,13 +339,43 @@ onUnmounted(async () => {
 })
 
 // --- Join & Lobby Logic ---
+const sanitizeAndValidateName = (name) => {
+  const trimmed = name.trim()
+  if (!trimmed || trimmed.length > 15) {
+    alert('プレイヤー名は1〜15文字で入力してください。')
+    return null
+  }
+  
+  // URLやメアドらしき文字列をブロック
+  const urlRegex = /https?:\/\/[^\s]+/i
+  const emailRegex = /[^\s@]+@[^\s@]+\.[^\s@]+/i
+  if (urlRegex.test(trimmed) || emailRegex.test(trimmed)) {
+    alert('URLやメールアドレスを含む名前は使用できません。')
+    return null
+  }
+  
+  // 基本的なXSS対策（HTMLタグをエスケープ）
+  const sanitized = trimmed
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+    
+  return sanitized
+}
 const joinRandomRoom = async () => {
   if (isJoining.value) return
   isJoining.value = true
   
   try {
     initAudio()
-    if (!playerName.value.trim() || playerName.value.length > 10) return
+    const validName = sanitizeAndValidateName(playerName.value)
+    if (!validName) {
+      isJoining.value = false
+      return
+    }
+    playerName.value = validName
     localStorage.setItem('shiritori_player_name', playerName.value)
     
     // 中級、HP3固定
@@ -382,9 +421,12 @@ const joinOrCreateRoom = async () => {
   
   try {
     initAudio()
-    if (!playerName.value.trim()) return
-    if (playerName.value.length > 10) return
-    
+    const validName = sanitizeAndValidateName(playerName.value)
+    if (!validName) {
+      isJoining.value = false
+      return
+    }
+    playerName.value = validName
     localStorage.setItem('shiritori_player_name', playerName.value)
     
     if (roomId.value) {
@@ -916,8 +958,11 @@ const uploadImageToStorage = async (base64Str) => {
     const fileName = `${roomId.value}/${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`;
     const { data, error } = await supabase.storage.from('shiritori-images').upload(fileName, blob, { contentType: 'image/jpeg' });
     if (!error) {
-      const { data: { publicUrl } } = supabase.storage.from('shiritori-images').getPublicUrl(fileName);
-      return publicUrl;
+      // 1時間（3600秒）で有効期限が切れるSigned URLを発行
+      const { data: signedData, error: signedError } = await supabase.storage.from('shiritori-images').createSignedUrl(fileName, 3600);
+      if (!signedError && signedData) {
+        return signedData.signedUrl;
+      }
     }
   } catch (err) {
     console.error('Image upload failed:', err);
@@ -1259,10 +1304,10 @@ const goBackToTop = async () => {
 </script>
 
 <template>
-  <div v-if="isReconnecting" class="fixed top-0 left-0 w-full bg-red-500 text-white text-center py-1 text-xs font-bold z-[200] animate-pulse">
+  <div v-if="isReconnecting && !isAdminMode" class="fixed top-0 left-0 w-full bg-red-500 text-white text-center py-1 text-xs font-bold z-[200] animate-pulse">
     📡 接続が不安定です。再接続中...
   </div>
-  <div 
+  <div v-if="!isAdminMode"
     class="w-full bg-pink-50 flex flex-col items-center p-3 font-bold max-w-md mx-auto relative"
     :class="currentMode === 'play' ? 'h-[100dvh] overflow-hidden' : 'min-h-[100dvh] overflow-x-hidden overflow-y-auto pt-8 pb-4'"
   >
@@ -1340,26 +1385,35 @@ const goBackToTop = async () => {
             </div>
           </label>
 
-          <label class="flex items-center justify-start w-full cursor-pointer bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] mt-4 gap-2">
-            <input type="checkbox" v-model="isAgreed" class="w-5 h-5 rounded border-slate-800 text-cyan-500 focus:ring-cyan-500" />
-            <span class="text-slate-700 text-xs font-bold leading-tight flex-1">
-              <a href="#" @click.prevent="showRulesModal = true" class="text-cyan-600 underline hover:text-cyan-500">利用ルール・安全ガイド</a>とプライバシーポリシーに同意する
-            </span>
-          </label>
+          <div class="space-y-2 mt-4">
+            <label class="flex items-center justify-start w-full cursor-pointer bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] gap-2">
+              <input type="checkbox" v-model="isAgreed" class="w-5 h-5 rounded border-slate-800 text-cyan-500 focus:ring-cyan-500" />
+              <span class="text-slate-700 text-sm font-bold leading-tight flex-1">
+                <a href="#" @click.prevent="showRulesModal = true" class="text-cyan-600 underline hover:text-cyan-500">利用ルール・安全ガイド</a> に同意する
+              </span>
+            </label>
+
+            <label class="flex items-center justify-start w-full cursor-pointer bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] gap-2">
+              <input type="checkbox" v-model="isPrivacyAgreed" class="w-5 h-5 rounded border-slate-800 text-cyan-500 focus:ring-cyan-500" />
+              <span class="text-slate-700 text-sm font-bold leading-tight flex-1">
+                <a href="#" @click.prevent="showPrivacyPolicyModal = true" class="text-cyan-600 underline hover:text-cyan-500">プライバシーポリシー</a> を確認した
+              </span>
+            </label>
+          </div>
 
           <button 
             v-if="!roomId"
             @click="joinRandomRoom"
-            :disabled="!playerName.trim() || isJoining || !isAgreed"
+            :disabled="!playerName.trim() || isJoining || !isAgreed || !isPrivacyAgreed"
             class="w-full py-4 mt-4 rounded-2xl text-xl text-white bg-pink-500 hover:bg-pink-400 shadow-[0_6px_0_0_#be185d] transition-all duration-150 disabled:opacity-50 disabled:shadow-none disabled:translate-y-[6px] active:translate-y-[6px] active:shadow-none"
           >
             <span v-if="isJoining">通信中...</span>
-            <span v-else>見知らぬ人と遊ぶ🌐</span>
+            <span v-else>知らない人と遊ぶ🎉</span>
           </button>
 
           <button 
             @click="joinOrCreateRoom"
-            :disabled="!playerName.trim() || isJoining || !isAgreed"
+            :disabled="!playerName.trim() || isJoining || !isAgreed || !isPrivacyAgreed"
             class="w-full py-4 mt-2 rounded-2xl text-xl text-slate-800 shadow-[0_6px_0_0_#ca8a04] transition-all duration-150 disabled:opacity-50 disabled:shadow-none disabled:translate-y-[6px]"
             :class="!roomId ? 'bg-yellow-400 hover:bg-yellow-300 active:shadow-[0_0px_0_0_#ca8a04] active:translate-y-[6px]' : 'bg-cyan-400 hover:bg-cyan-300 text-white shadow-[0_6px_0_0_#0891b2] active:shadow-[0_0px_0_0_#0891b2] active:translate-y-[6px]'"
           >
@@ -1556,9 +1610,12 @@ const goBackToTop = async () => {
             </div>
             
             <div v-if="showCameraWarning" class="absolute top-4 left-0 right-0 z-50 flex justify-center animate-fade-in-up pointer-events-none px-4">
-              <div class="bg-slate-900/90 text-white text-xs sm:text-sm font-bold px-4 py-3 rounded-2xl shadow-lg border border-slate-700 flex items-center gap-2">
-                <span>⚠️</span>
-                <span>他人や個人情報が写り込まないよう注意してね📸</span>
+              <div class="bg-slate-900/90 text-white text-xs sm:text-sm font-bold px-4 py-3 rounded-2xl shadow-lg border border-slate-700 flex flex-col items-center gap-1">
+                <div class="flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>他人や個人情報が写り込まないよう注意してね！</span>
+                </div>
+                <div class="text-[10px] text-slate-300">※ゲームのために危険な場所へ入らないでください</div>
               </div>
             </div>
 
@@ -1649,8 +1706,11 @@ const goBackToTop = async () => {
     
     <!-- MODALS -->
     <RulesModal :isOpen="showRulesModal" @close="showRulesModal = false" />
+    <PrivacyPolicyModal :isOpen="showPrivacyPolicyModal" @close="showPrivacyPolicyModal = false" />
     <ReportModal :isOpen="showReportModal" @close="showReportModal = false" @submit="handleReportSubmit" />
   </div>
+  
+  <AdminPanel v-else />
 </template>
 
 <style>
