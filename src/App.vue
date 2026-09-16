@@ -11,6 +11,7 @@ const hostId = ref(null)
 const roomShareEnabled = ref(false)
 const hasPlayedGameOverSound = ref(false)
 const isJoining = ref(false)
+const isAgreed = ref(false)
 
 const playGameOver = () => {
   if (hasPlayedGameOverSound.value) return
@@ -124,6 +125,51 @@ onUnmounted(async () => {
 })
 
 // --- Join & Lobby Logic ---
+const joinRandomRoom = async () => {
+  if (isJoining.value) return
+  isJoining.value = true
+  
+  try {
+    initAudio()
+    if (!playerName.value.trim() || playerName.value.length > 10) return
+    localStorage.setItem('shiritori_player_name', playerName.value)
+    
+    // 中級、HP3固定
+    difficulty.value = 'normal'
+    initialHp.value = 3
+    isImageShareEnabled.value = false // パブリックは画像共有オフ推奨
+
+    const randomChar = hiraganaList[Math.floor(Math.random() * hiraganaList.length)]
+    
+    const { data: newRoomId, error } = await supabase.rpc('find_or_create_public_room', {
+      p_player_id: playerId.value,
+      p_name: String(playerName.value),
+      p_hp: 3,
+      p_difficulty: 'normal',
+      p_random_char: randomChar
+    })
+
+    if (error || !newRoomId) {
+      console.error('Random match error:', error)
+      alert('マッチングに失敗しました💦')
+      return
+    }
+
+    roomId.value = newRoomId
+    localStorage.setItem('shiritori_player_id', playerId.value)
+    
+    await fetchRoomData(newRoomId)
+    
+    window.history.pushState({}, '', `/?room=${newRoomId}`)
+    setupRealtimeSubscription(newRoomId)
+    currentMode.value = 'lobby'
+  } catch (error) {
+    console.error('Random match error:', error)
+  } finally {
+    isJoining.value = false
+  }
+}
+
 const joinOrCreateRoom = async () => {
   if (isJoining.value) return
   isJoining.value = true
@@ -872,9 +918,24 @@ const goBackToTop = () => {
             </div>
           </label>
 
+          <label class="flex items-center justify-start w-full cursor-pointer bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] mt-4 gap-2">
+            <input type="checkbox" v-model="isAgreed" class="w-5 h-5 rounded border-slate-800 text-cyan-500 focus:ring-cyan-500" />
+            <span class="text-slate-700 text-xs font-bold leading-tight flex-1">利用規約とプライバシーポリシーに同意する</span>
+          </label>
+
+          <button 
+            v-if="!roomId"
+            @click="joinRandomRoom"
+            :disabled="!playerName.trim() || isJoining || !isAgreed"
+            class="w-full py-4 mt-4 rounded-2xl text-xl text-white bg-pink-500 hover:bg-pink-400 shadow-[0_6px_0_0_#be185d] transition-all duration-150 disabled:opacity-50 disabled:shadow-none disabled:translate-y-[6px] active:translate-y-[6px] active:shadow-none"
+          >
+            <span v-if="isJoining">通信中...</span>
+            <span v-else>見知らぬ人と遊ぶ🌐</span>
+          </button>
+
           <button 
             @click="joinOrCreateRoom"
-            :disabled="!playerName.trim() || isJoining"
+            :disabled="!playerName.trim() || isJoining || !isAgreed"
             class="w-full py-4 mt-2 rounded-2xl text-xl text-slate-800 shadow-[0_6px_0_0_#ca8a04] transition-all duration-150 disabled:opacity-50 disabled:shadow-none disabled:translate-y-[6px]"
             :class="!roomId ? 'bg-yellow-400 hover:bg-yellow-300 active:shadow-[0_0px_0_0_#ca8a04] active:translate-y-[6px]' : 'bg-cyan-400 hover:bg-cyan-300 text-white shadow-[0_6px_0_0_#0891b2] active:shadow-[0_0px_0_0_#0891b2] active:translate-y-[6px]'"
           >
