@@ -84,10 +84,12 @@ const activeChannels = []
 let turnTimeout = null
 
 const cleanupSubscriptions = async () => {
+  isCleaningUp = true
   for (const channel of activeChannels) {
     await supabase.removeChannel(channel)
   }
   activeChannels.length = 0
+  isCleaningUp = false
 }
 
 const startTurnTimeout = () => {
@@ -170,7 +172,17 @@ onMounted(async () => {
   
   window.addEventListener('beforeunload', handleBeforeUnload)
   window.addEventListener('popstate', handleBeforeUnload)
+  window.addEventListener('offline', handleOffline)
+  window.addEventListener('online', handleOnline)
 })
+
+const handleOffline = () => {
+  isRealtimeConnected.value = false
+  triggerReconnect()
+}
+const handleOnline = () => {
+  triggerReconnect(true)
+}
 
 let heartbeatInterval = null
 const startHeartbeat = () => {
@@ -178,6 +190,46 @@ const startHeartbeat = () => {
   heartbeatInterval = setInterval(() => {
     supabase.from('players').update({ last_seen_at: new Date().toISOString() }).eq('id', playerId.value).then()
   }, 15000)
+}
+
+const isRealtimeConnected = ref(true)
+const isReconnecting = ref(false)
+let reconnectTimer = null
+let reconnectAttempts = 0
+let isCleaningUp = false
+
+const triggerReconnect = (immediate = false) => {
+  if (!roomId.value || currentMode.value === 'join' || currentMode.value === 'history') return
+  if (isReconnecting.value && !immediate) return
+  if (isCleaningUp) return
+
+  isReconnecting.value = true
+  isRealtimeConnected.value = false
+  if (reconnectTimer) clearTimeout(reconnectTimer)
+
+  const delay = immediate ? 0 : Math.min(1000 * Math.pow(2, reconnectAttempts), 10000)
+  
+  reconnectTimer = setTimeout(async () => {
+    try {
+      if (!window.navigator.onLine) {
+        reconnectAttempts++
+        isReconnecting.value = false
+        triggerReconnect()
+        return
+      }
+
+      await cleanupSubscriptions()
+      setupRealtimeSubscription(roomId.value)
+      await recoverGameState(roomId.value) // This handles fetching and updating UI state
+      
+      reconnectAttempts = 0
+    } catch (e) {
+      console.error('Reconnect error:', e)
+      reconnectAttempts++
+      isReconnecting.value = false
+      triggerReconnect()
+    }
+  }, delay)
 }
 
 watch(currentMode, (newMode) => {
@@ -256,6 +308,8 @@ onUnmounted(async () => {
   if (heartbeatInterval) clearInterval(heartbeatInterval)
   window.removeEventListener('beforeunload', handleBeforeUnload)
   window.removeEventListener('popstate', handleBeforeUnload)
+  window.removeEventListener('offline', handleOffline)
+  window.removeEventListener('online', handleOnline)
   await leaveLobby()
   clearTimeout(turnTimeout)
   await cleanupSubscriptions()
@@ -548,6 +602,17 @@ const fetchRoomData = async (id) => {
 }
 
 const setupRealtimeSubscription = (id) => {
+  const handleStatus = (status) => {
+    if (isCleaningUp) return
+    if (status === 'SUBSCRIBED') {
+      isRealtimeConnected.value = true
+      isReconnecting.value = false
+      reconnectAttempts = 0
+    } else if (['CLOSED', 'CHANNEL_ERROR', 'TIMED_OUT'].includes(status)) {
+      triggerReconnect()
+    }
+  }
+
   // Listen to Rooms (変数 roomChannel に格納)
   const roomChannel = supabase.channel(`rooms-${id}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${id}` }, async (payload) => {
     const room = payload.new
@@ -580,7 +645,7 @@ const setupRealtimeSubscription = (id) => {
 
     currentTurnIndex.value = room.current_turn_index
     targetLetter.value = room.current_char || targetLetter.value
-  }).subscribe()
+  }).subscribe(handleStatus)
 
   // Listen to Players (変数 playerChannel に格納)
   const playerChannel = supabase.channel(`players-${id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${id}` }, (payload) => {
@@ -597,7 +662,7 @@ const setupRealtimeSubscription = (id) => {
     } else if (payload.eventType === 'DELETE') {
       playersList.value = playersList.value.filter(p => p.id !== payload.old.id)
     }
-  }).subscribe()
+  }).subscribe(handleStatus)
 
   // Listen to Words (変数 wordChannel に格納)
   const wordChannel = supabase.channel(`words-${id}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'words', filter: `room_id=eq.${id}` }, (payload) => {
@@ -630,7 +695,7 @@ const setupRealtimeSubscription = (id) => {
       capturedImage.value = null
       if (videoRef.value && isMyTurn.value) videoRef.value.play()
     }
-  }).subscribe()
+  }).subscribe(handleStatus)
 
   const presenceChannel = supabase.channel(`presence-${id}`, {
     config: {
@@ -659,6 +724,7 @@ const setupRealtimeSubscription = (id) => {
       }
     })
   }).subscribe(async (status) => {
+    handleStatus(status)
     if (status === 'SUBSCRIBED') {
       await presenceChannel.track({ id: playerId.value })
     }
@@ -1106,6 +1172,9 @@ const goBackToTop = async () => {
 </script>
 
 <template>
+  <div v-if="isReconnecting" class="fixed top-0 left-0 w-full bg-red-500 text-white text-center py-1 text-xs font-bold z-[200] animate-pulse">
+    📡 接続が不安定です。再接続中...
+  </div>
   <div 
     class="w-full bg-pink-50 flex flex-col items-center p-3 font-bold max-w-md mx-auto relative"
     :class="currentMode === 'play' ? 'h-[100dvh] overflow-hidden' : 'min-h-[100dvh] overflow-x-hidden overflow-y-auto pt-8 pb-4'"
