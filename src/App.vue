@@ -158,6 +158,17 @@ const joinRandomRoom = async () => {
     roomId.value = newRoomId
     localStorage.setItem('shiritori_player_id', playerId.value)
     
+    // ユーザー指示: 再度 SELECT を行い自身のプレイヤー情報を取得しローカルにセット
+    const { data: fetchedPlayer, error: fetchErr } = await supabase.from('players').select('*').eq('id', playerId.value).single()
+    if (fetchErr) {
+      console.error('Player fetch error:', fetchErr)
+    } else if (fetchedPlayer) {
+      // 重複を防ぐ
+      if (!playersList.value.find(p => p.id === fetchedPlayer.id)) {
+        playersList.value.push(fetchedPlayer)
+      }
+    }
+    
     await fetchRoomData(newRoomId)
     
     window.history.pushState({}, '', `/?room=${newRoomId}`)
