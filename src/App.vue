@@ -299,9 +299,66 @@ const joinOrCreateRoom = async () => {
 
 const startGame = async () => {
   initAudio()
-  if (!isHost.value) return
+  if (!isHost.value && !isPublicRoom.value) return
+  if (roomStatus.value === 'playing') return // 重複実行防止
+  
+  // 状態をローカルで先に書き換えてロックする
+  roomStatus.value = 'playing'
   await supabase.rpc('update_room_status', { p_room_id: roomId.value, p_status: 'playing' })
 }
+
+const countdownTime = ref(null)
+let countdownInterval = null
+
+const toggleReady = async () => {
+  if (!myPlayer.value) return
+  initAudio()
+  const newReadyState = !myPlayer.value.is_ready
+  // Optimistic UI update
+  myPlayer.value.is_ready = newReadyState
+  await supabase.rpc('toggle_player_ready', { p_player_id: playerId.value, p_is_ready: newReadyState })
+}
+
+watch(playersList, (newList) => {
+  if (currentMode.value !== 'lobby' || roomStatus.value !== 'waiting' || !isPublicRoom.value) return
+
+  const validPlayers = newList.filter(p => (p.hp || 0) > 0)
+  const readyPlayers = validPlayers.filter(p => p.is_ready)
+  const readyCount = readyPlayers.length
+  const totalCount = validPlayers.length
+
+  if (readyCount >= 2 && readyCount === totalCount) {
+    // 全員準備完了 -> 即時スタート
+    if (countdownInterval) {
+      clearInterval(countdownInterval)
+      countdownInterval = null
+    }
+    countdownTime.value = null
+    startGame()
+  } else if (readyCount >= 2 && readyCount < totalCount) {
+    // 2人以上準備完了だが未準備がいる -> 15秒カウントダウン
+    if (!countdownInterval) {
+      countdownTime.value = 15
+      countdownInterval = setInterval(() => {
+        if (countdownTime.value > 0) {
+          countdownTime.value--
+        } else {
+          clearInterval(countdownInterval)
+          countdownInterval = null
+          countdownTime.value = null
+          startGame()
+        }
+      }, 1000)
+    }
+  } else {
+    // 2人未満 -> キャンセル
+    if (countdownInterval) {
+      clearInterval(countdownInterval)
+      countdownInterval = null
+    }
+    countdownTime.value = null
+  }
+}, { deep: true })
 
 const shareRoomLink = async () => {
   const url = `${window.location.origin}/?room=${roomId.value}`
@@ -973,17 +1030,21 @@ const goBackToTop = () => {
               <span class="w-6 h-6 rounded-full bg-cyan-400 text-white flex items-center justify-center text-xs shrink-0">{{ idx + 1 }}</span>
               <span class="text-slate-800 truncate flex-1" :class="{'line-through': p.hp <= 0}">{{ p.name }}</span>
               <span class="text-xs tracking-widest text-pink-500 shrink-0">{{ '❤️'.repeat(p.hp || 0) }}{{ '🖤'.repeat(Math.max(0, initialHp - (p.hp || 0))) }}</span>
-              <span v-if="p.id === hostId" class="text-[10px] bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full shrink-0">ホスト</span>
+              <span v-if="!isPublicRoom && p.id === hostId" class="text-[10px] bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full shrink-0">ホスト</span>
+              <span v-if="isPublicRoom && p.is_ready" class="text-[10px] bg-green-400 text-white px-2 py-0.5 rounded-full shrink-0 font-bold">✅ 準備OK</span>
             </li>
             <li v-if="playersList.length === 0" class="text-center text-slate-400 text-sm py-4">読み込み中...</li>
           </ul>
         </div>
-        <p v-if="isPublicRoom && playersList.length < 2" class="text-slate-500 text-sm animate-pulse mt-4">他のプレイヤーを待っています...（2人以上でスタート可能！）</p>
-        <p v-else-if="isPublicRoom && playersList.length >= 2" class="text-pink-500 font-bold text-sm animate-pulse mt-4">準備ができたらスタートボタンを押してください！</p>
+        
+        <p v-if="isPublicRoom && countdownTime !== null" class="text-pink-500 font-bold text-lg animate-pulse mt-4">ゲーム開始まであと {{ countdownTime }}秒...</p>
+        <p v-else-if="isPublicRoom && playersList.length < 2" class="text-slate-500 text-sm animate-pulse mt-4">他のプレイヤーを待っています...（2人以上でスタート可能！）</p>
+        <p v-else-if="isPublicRoom && playersList.length >= 2" class="text-pink-500 font-bold text-sm animate-pulse mt-4">準備ができたらボタンを押してください！</p>
         <p v-else-if="!isHost" class="text-slate-500 text-sm animate-pulse mt-4">ホストが開始するのを待っています...</p>
         
         <div class="w-full flex flex-col gap-2 mt-4">
           <button 
+            v-if="!isPublicRoom"
             @click="shareRoomLink"
             class="w-full py-4 rounded-2xl text-xl text-slate-800 bg-white border-4 border-slate-800 shadow-[0_6px_0_0_#1e293b] transition-all duration-150 active:shadow-none active:translate-y-[6px]"
           >
@@ -991,9 +1052,19 @@ const goBackToTop = () => {
           </button>
           
           <button 
-            v-if="isHost || isPublicRoom"
+            v-if="isPublicRoom"
+            @click="toggleReady"
+            :disabled="playersList.length < 2"
+            class="w-full py-4 rounded-2xl text-xl text-white transition-all duration-150 active:shadow-none active:translate-y-[6px] disabled:opacity-50 disabled:shadow-none disabled:translate-y-[6px]"
+            :class="myPlayer?.is_ready ? 'bg-green-500 hover:bg-green-400 shadow-[0_6px_0_0_#15803d]' : 'bg-pink-500 hover:bg-pink-400 shadow-[0_6px_0_0_#be185d]'"
+          >
+            {{ myPlayer?.is_ready ? '準備を取り消す ❌' : '準備完了する ✨' }}
+          </button>
+
+          <button 
+            v-if="!isPublicRoom && isHost"
             @click="startGame"
-            :disabled="isPublicRoom ? playersList.length < 2 : playersList.length < 1"
+            :disabled="playersList.length < 1"
             class="w-full py-4 rounded-2xl text-xl text-white bg-pink-500 hover:bg-pink-400 shadow-[0_6px_0_0_#be185d] transition-all duration-150 active:shadow-none active:translate-y-[6px] disabled:opacity-50 disabled:shadow-none disabled:translate-y-[6px]"
           >
             ゲームスタート！✨
