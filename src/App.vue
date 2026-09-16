@@ -112,11 +112,26 @@ const cleanupSubscriptions = async () => {
 
 const startTurnTimeout = () => {
   clearTimeout(turnTimeout)
-  if (currentMode.value === 'play' && isMyTurn.value && currentState.value === 'initial') {
-    turnTimeout = setTimeout(() => {
-      if (currentMode.value === 'play' && isMyTurn.value && currentState.value === 'initial') {
-        alert('60秒経過のため、強制的にパスします💨')
-        passMyTurn()
+  if (currentMode.value === 'play' && currentState.value === 'initial' && activePlayer.value) {
+    turnTimeout = setTimeout(async () => {
+      if (currentMode.value === 'play' && currentState.value === 'initial' && activePlayer.value) {
+        if (isMyTurn.value) {
+          alert('60秒経過のため、強制パスします！')
+          passMyTurn()
+        } else {
+          // ゴースト対策：他の生きているプレイヤーが代理でパス処理を行う
+          const myPlayerInfo = playersList.value.find(p => p.id === playerId.value)
+          if (myPlayerInfo && myPlayerInfo.hp > 0) {
+            const expectedHp = activePlayer.value.hp
+            const newHp = Math.max(0, expectedHp - 1)
+            const expectedTurn = currentTurnIndex.value
+            
+            const hpSuccess = await safeUpdatePlayerHp(activePlayer.value.id, expectedHp, newHp, roomId.value)
+            if (hpSuccess) {
+              await safeUpdateRoomTurn(roomId.value, expectedTurn, expectedTurn + 1, targetLetter.value)
+            }
+          }
+        }
       }
     }, 60000)
   }
@@ -316,8 +331,8 @@ const leaveLobby = async () => {
     heartbeatInterval = null
   }
   if (currentMode.value === 'lobby' && roomStatus.value === 'waiting' && playerId.value) {
-    // 待機ロビー離脱時に自身のプレイヤーレコードを削除
-    await supabase.from('players').delete().eq('id', playerId.value)
+    // 物理削除は外部キー制約エラーになるため、room_idをnullにして退出扱いにする
+    await supabase.from('players').update({ room_id: null, is_ready: false }).eq('id', playerId.value)
   }
 }
 
@@ -328,8 +343,8 @@ const handleBeforeUnload = (e) => {
   }
   if (currentMode.value === 'lobby' && roomStatus.value === 'waiting' && playerId.value) {
     // navigator.sendBeacon fallback isn't perfectly reliable with Supabase client, 
-    // but we can fire a fire-and-forget delete.
-    supabase.from('players').delete().eq('id', playerId.value).then()
+    // but we can fire a fire-and-forget update.
+    supabase.from('players').update({ room_id: null, is_ready: false }).eq('id', playerId.value).then()
   }
 }
 
@@ -790,12 +805,17 @@ const setupRealtimeSubscription = (id) => {
         playersList.value.sort((a, b) => a.order_index - b.order_index)
       }
     } else if (payload.eventType === 'UPDATE') {
-      const idx = playersList.value.findIndex(p => p.id === payload.new.id)
-      if (idx !== -1) {
-        playersList.value[idx] = payload.new
+      if (payload.new.room_id !== id) {
+        // Player left the room by setting room_id to null or another room
+        playersList.value = playersList.value.filter(p => p.id !== payload.new.id)
       } else {
-        playersList.value.push(payload.new)
-        playersList.value.sort((a, b) => a.order_index - b.order_index)
+        const idx = playersList.value.findIndex(p => p.id === payload.new.id)
+        if (idx !== -1) {
+          playersList.value[idx] = payload.new
+        } else {
+          playersList.value.push(payload.new)
+          playersList.value.sort((a, b) => a.order_index - b.order_index)
+        }
       }
     } else if (payload.eventType === 'DELETE') {
       playersList.value = playersList.value.filter(p => p.id !== payload.old.id)
