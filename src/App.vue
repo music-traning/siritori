@@ -459,7 +459,7 @@ const startCamera = async () => {
     }
   } catch (err) {
     console.error('Camera error:', err)
-    alert('カメラの起動に失敗しました😢')
+    alert(`カメラの起動に失敗しました😢\n(${err.name}: ${err.message})`)
   }
 }
 
