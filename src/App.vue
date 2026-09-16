@@ -121,7 +121,30 @@ onMounted(async () => {
   window.addEventListener('popstate', handleBeforeUnload)
 })
 
+let heartbeatInterval = null
+const startHeartbeat = () => {
+  if (heartbeatInterval) clearInterval(heartbeatInterval)
+  heartbeatInterval = setInterval(() => {
+    supabase.from('players').update({ last_seen_at: new Date().toISOString() }).eq('id', playerId.value).then()
+  }, 15000)
+}
+
+watch(currentMode, (newMode) => {
+  if (newMode === 'lobby') {
+    startHeartbeat()
+  } else {
+    if (heartbeatInterval) {
+      clearInterval(heartbeatInterval)
+      heartbeatInterval = null
+    }
+  }
+})
+
 const leaveLobby = async () => {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval)
+    heartbeatInterval = null
+  }
   if (currentMode.value === 'lobby' && roomStatus.value === 'waiting' && playerId.value) {
     // 待機ロビー離脱時に自身のプレイヤーレコードを削除
     await supabase.from('players').delete().eq('id', playerId.value)
@@ -129,6 +152,10 @@ const leaveLobby = async () => {
 }
 
 const handleBeforeUnload = (e) => {
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval)
+    heartbeatInterval = null
+  }
   if (currentMode.value === 'lobby' && roomStatus.value === 'waiting' && playerId.value) {
     // navigator.sendBeacon fallback isn't perfectly reliable with Supabase client, 
     // but we can fire a fire-and-forget delete.
@@ -137,6 +164,7 @@ const handleBeforeUnload = (e) => {
 }
 
 onUnmounted(async () => {
+  if (heartbeatInterval) clearInterval(heartbeatInterval)
   window.removeEventListener('beforeunload', handleBeforeUnload)
   window.removeEventListener('popstate', handleBeforeUnload)
   await leaveLobby()
