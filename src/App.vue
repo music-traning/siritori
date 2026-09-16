@@ -115,9 +115,29 @@ onMounted(async () => {
   }
   
   currentMode.value = 'join'
+  window.addEventListener('beforeunload', handleBeforeUnload)
+  window.addEventListener('popstate', handleBeforeUnload)
 })
 
+const leaveLobby = async () => {
+  if (currentMode.value === 'lobby' && roomStatus.value === 'waiting' && playerId.value) {
+    // 待機ロビー離脱時に自身のプレイヤーレコードを削除
+    await supabase.from('players').delete().eq('id', playerId.value)
+  }
+}
+
+const handleBeforeUnload = (e) => {
+  if (currentMode.value === 'lobby' && roomStatus.value === 'waiting' && playerId.value) {
+    // navigator.sendBeacon fallback isn't perfectly reliable with Supabase client, 
+    // but we can fire a fire-and-forget delete.
+    supabase.from('players').delete().eq('id', playerId.value).then()
+  }
+}
+
 onUnmounted(async () => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+  window.removeEventListener('popstate', handleBeforeUnload)
+  await leaveLobby()
   clearTimeout(turnTimeout)
   await cleanupSubscriptions()
   if (stream.value) {
@@ -933,7 +953,8 @@ const getPlayerName = (pId) => {
   return player ? player.name : '不明'
 }
 
-const goBackToTop = () => {
+const goBackToTop = async () => {
+  await leaveLobby()
   window.location.href = '/'
 }
 </script>
@@ -1064,8 +1085,7 @@ const goBackToTop = () => {
           <button 
             v-if="isPublicRoom"
             @click="toggleReady"
-            :disabled="playersList.length < 2"
-            class="w-full py-4 rounded-2xl text-xl text-white transition-all duration-150 active:shadow-none active:translate-y-[6px] disabled:opacity-50 disabled:shadow-none disabled:translate-y-[6px]"
+            class="w-full py-4 rounded-2xl text-xl text-white transition-all duration-150 active:shadow-none active:translate-y-[6px]"
             :class="myPlayer?.is_ready ? 'bg-green-500 hover:bg-green-400 shadow-[0_6px_0_0_#15803d]' : 'bg-pink-500 hover:bg-pink-400 shadow-[0_6px_0_0_#be185d]'"
           >
             {{ myPlayer?.is_ready ? '準備を取り消す ❌' : '準備完了する ✨' }}
