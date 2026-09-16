@@ -105,8 +105,10 @@ const startTurnTimeout = () => {
   clearTimeout(turnTimeout)
   if (currentMode.value === 'play' && isMyTurn.value && currentState.value === 'initial') {
     turnTimeout = setTimeout(() => {
-      alert('60秒経過したため、自動的にパスしました💨')
-      passMyTurn()
+      if (currentMode.value === 'play' && isMyTurn.value && currentState.value === 'initial') {
+        alert('60秒経過のため、強制的にパスします💨')
+        passMyTurn()
+      }
     }, 60000)
   }
 }
@@ -493,11 +495,12 @@ const joinOrCreateRoom = async () => {
 const startGame = async () => {
   initAudio()
   if (!isHost.value && !isPublicRoom.value) return
-  if (roomStatus.value === 'playing') return // 重複実行防止
+  if (roomStatus.value === 'playing') return
   
-  // 状態をローカルで先に書き換えてロックする
-  roomStatus.value = 'playing'
-  await supabase.rpc('update_room_status', { p_room_id: roomId.value, p_status: 'playing' })
+  const statusSuccess = await safeUpdateRoomStatus(roomId.value, 'waiting', 'playing')
+  if (statusSuccess) {
+    roomStatus.value = 'playing'
+  }
 }
 
 const countdownTime = ref(null)
@@ -583,6 +586,50 @@ const shareRoomLink = async () => {
       alert('リンクのコピーに失敗しました💦')
     }
   }
+}
+
+// --- Optimistic Update Helpers ---
+const safeUpdateRoomTurn = async (id, expectedIndex, newIndex, nextChar) => {
+  const { data: success, error } = await supabase.rpc('update_room_turn_optimistic', {
+    p_room_id: id,
+    p_expected_turn_index: expectedIndex,
+    p_new_turn_index: newIndex,
+    p_next_char: nextChar
+  })
+  if (error || !success) {
+    console.warn('Turn update rejected (conflict). Syncing state...')
+    await fetchRoomData(id)
+    return false
+  }
+  return true
+}
+
+const safeUpdatePlayerHp = async (pId, expectedHp, newHp, rId) => {
+  const { data: success, error } = await supabase.rpc('update_player_hp_optimistic', {
+    p_player_id: pId,
+    p_expected_hp: expectedHp,
+    p_new_hp: newHp
+  })
+  if (error || !success) {
+    console.warn('HP update rejected (conflict). Syncing state...')
+    await fetchRoomData(rId)
+    return false
+  }
+  return true
+}
+
+const safeUpdateRoomStatus = async (id, expectedStatus, newStatus) => {
+  const { data: success, error } = await supabase.rpc('update_room_status_optimistic', {
+    p_room_id: id,
+    p_expected_status: expectedStatus,
+    p_new_status: newStatus
+  })
+  if (error || !success) {
+    console.warn('Status update rejected (conflict). Syncing state...')
+    await fetchRoomData(id)
+    return false
+  }
+  return true
 }
 
 // --- Data Fetch & Realtime ---
@@ -763,6 +810,9 @@ const checkWinCondition = async () => {
   const alivePlayers = playersList.value.filter(p => p.hp > 0)
 
   if (alivePlayers.length === 0) {
+    const statusSuccess = await safeUpdateRoomStatus(roomId.value, 'playing', 'gameover')
+    if (!statusSuccess) return true
+
     isProcessingGameOver.value = true
     playGameOver()
     gameOverData.value = {
@@ -785,11 +835,13 @@ const checkWinCondition = async () => {
     }
     const { error: wError } = await supabase.from('words').insert([payload])
     if (wError) console.error('Words insert error (wipeout):', wError)
-    await supabase.rpc('update_room_status', { p_room_id: roomId.value, p_status: 'gameover' })
     return true
   }
 
   if (playersList.value.length > 1 && alivePlayers.length === 1) {
+    const statusSuccess = await safeUpdateRoomStatus(roomId.value, 'playing', 'gameover')
+    if (!statusSuccess) return true
+
     isProcessingGameOver.value = true
     const winner = alivePlayers[0]
     playSuccess()
@@ -813,7 +865,6 @@ const checkWinCondition = async () => {
     }
     const { error: wError } = await supabase.from('words').insert([payload])
     if (wError) console.error('Words insert error (survival):', wError)
-    await supabase.rpc('update_room_status', { p_room_id: roomId.value, p_status: 'gameover' })
     return true
   }
   return false
@@ -892,6 +943,12 @@ const handleAction = async () => {
   chatData.value = { text: 'AIがガン見でチェック中...👀✨', image: null }
 
   if (turnCount.value >= 10) {
+    const statusSuccess = await safeUpdateRoomStatus(roomId.value, 'playing', 'gameover')
+    if (!statusSuccess) {
+      currentState.value = 'initial'
+      return
+    }
+
     if (isProcessingGameOver.value) return
     isProcessingGameOver.value = true
     playSuccess()
@@ -919,7 +976,6 @@ const handleAction = async () => {
     }
     const { error: wError } = await supabase.from('words').insert([payload])
     if (wError) console.error('Words insert error (draw):', wError)
-    await supabase.rpc('update_room_status', { p_room_id: roomId.value, p_status: 'gameover' })
     return
   }
 
@@ -945,6 +1001,12 @@ const handleAction = async () => {
     const result = await response.json()
 
     if (result.is_game_over || result.reading?.endsWith('ん') || result.next_char === 'ん') {
+      const statusSuccess = await safeUpdateRoomStatus(roomId.value, 'playing', 'gameover')
+      if (!statusSuccess) {
+        currentState.value = 'initial'
+        return
+      }
+
       if (isProcessingGameOver.value) return
       isProcessingGameOver.value = true
       playGameOver()
@@ -972,8 +1034,14 @@ const handleAction = async () => {
       }
       const { error: wError } = await supabase.from('words').insert([payload])
       if (wError) console.error('Words insert error:', wError)
-      await supabase.rpc('update_room_status', { p_room_id: roomId.value, p_status: 'gameover' })
     } else if (result.is_valid) {
+      const expectedTurn = currentTurnIndex.value
+      const turnSuccess = await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), result.next_char)
+      if (!turnSuccess) {
+        currentState.value = 'initial'
+        return
+      }
+
       playSuccess()
       triggerWordAnimation(result.detected_word, result.reading)
       latestMyWord.value = result.detected_word
@@ -994,36 +1062,35 @@ const handleAction = async () => {
       const { error: wError } = await supabase.from('words').insert([payload])
       if (wError) console.error('Words insert error:', wError)
       
-      await supabase.rpc('update_room_turn', { 
-        p_room_id: roomId.value, 
-        p_player_id: playerId.value,
-        p_turn_index: getNextTurnIndex(currentTurnIndex.value),
-        p_next_char: result.next_char
-      })
-      
       turnCount.value++
       targetLetter.value = result.next_char
       capturedImage.value = null
       if (videoRef.value) videoRef.value.play()
       currentState.value = 'initial'
     } else {
-      playFailure()
-      chatData.value = { text: result.comment, image: null }
       const myPlayer = playersList.value.find(p => p.id === playerId.value)
       if (myPlayer) {
-        const newHp = Math.max(0, myPlayer.hp - 1)
-        await supabase.rpc('update_player_hp', { p_player_id: playerId.value, p_new_hp: newHp })
+        const expectedHp = myPlayer.hp
+        const newHp = Math.max(0, expectedHp - 1)
+        const hpSuccess = await safeUpdatePlayerHp(playerId.value, expectedHp, newHp, roomId.value)
+        if (!hpSuccess) {
+          currentState.value = 'initial'
+          return
+        }
+        
+        playFailure()
+        chatData.value = { text: result.comment, image: null }
         myPlayer.hp = newHp
         
         if (newHp <= 0) {
           const isOver = await checkWinCondition()
           if (!isOver) {
-            await supabase.rpc('update_room_turn', { 
-              p_room_id: roomId.value, 
-              p_player_id: playerId.value,
-              p_turn_index: getNextTurnIndex(currentTurnIndex.value),
-              p_next_char: targetLetter.value
-            })
+            const expectedTurn = currentTurnIndex.value
+            const turnSuccess = await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
+            if (!turnSuccess) {
+              currentState.value = 'initial'
+              return
+            }
             currentState.value = 'initial'
           }
         } else {
@@ -1054,10 +1121,19 @@ const handleAction = async () => {
 
 const passMyTurn = async () => {
   if (!isMyTurn.value || currentState.value === 'processing' || !myPlayer.value) return
+  
+  // 実行直前の再確認 (要件3)
+  const expectedTurn = currentTurnIndex.value
+  const expectedHp = myPlayer.value.hp
+  
   currentState.value = 'processing'
   
-  const newHp = Math.max(0, myPlayer.value.hp - 1)
-  await supabase.rpc('update_player_hp', { p_player_id: playerId.value, p_new_hp: newHp })
+  const newHp = Math.max(0, expectedHp - 1)
+  const hpSuccess = await safeUpdatePlayerHp(playerId.value, expectedHp, newHp, roomId.value)
+  if (!hpSuccess) {
+    currentState.value = 'initial'
+    return
+  }
   
   // Update local state BEFORE checking win condition
   const playerInList = playersList.value.find(p => p.id === playerId.value)
@@ -1066,22 +1142,20 @@ const passMyTurn = async () => {
   if (newHp <= 0) {
     const isOver = await checkWinCondition()
     if (!isOver) {
-      await supabase.rpc('update_room_turn', { 
-        p_room_id: roomId.value, 
-        p_player_id: playerId.value,
-        p_turn_index: getNextTurnIndex(currentTurnIndex.value),
-        p_next_char: targetLetter.value
-      })
+      const turnSuccess = await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
+      if (!turnSuccess) {
+        currentState.value = 'initial'
+        return
+      }
       currentState.value = 'initial'
     }
   } else {
     chatData.value = { text: `${myPlayer.value.name} がパスしました💨`, image: null }
-    await supabase.rpc('update_room_turn', { 
-      p_room_id: roomId.value, 
-      p_player_id: playerId.value,
-      p_turn_index: getNextTurnIndex(currentTurnIndex.value),
-      p_next_char: targetLetter.value
-    })
+    const turnSuccess = await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
+    if (!turnSuccess) {
+      currentState.value = 'initial'
+      return
+    }
     currentState.value = 'initial'
   }
 }
@@ -1089,7 +1163,11 @@ const passMyTurn = async () => {
 const surrender = async () => {
   if (!confirm('本当に降参して部屋を抜けますか？')) return
   if (myPlayer.value && myPlayer.value.hp > 0) {
-    await supabase.rpc('update_player_hp', { p_player_id: playerId.value, p_new_hp: 0 })
+    const expectedHp = myPlayer.value.hp
+    const hpSuccess = await safeUpdatePlayerHp(playerId.value, expectedHp, 0, roomId.value)
+    if (!hpSuccess) {
+      // 既に状態が変わっていても強制的に退出処理は進める
+    }
     
     // Update local state BEFORE checking win condition
     const playerInList = playersList.value.find(p => p.id === playerId.value)
@@ -1098,14 +1176,12 @@ const surrender = async () => {
     // Check if the game should end (last man standing / wipeout)
     const isOver = await checkWinCondition()
     if (!isOver && isMyTurn.value) {
-      await supabase.rpc('update_room_turn', { 
-        p_room_id: roomId.value, 
-        p_player_id: playerId.value,
-        p_turn_index: getNextTurnIndex(currentTurnIndex.value),
-        p_next_char: targetLetter.value
-      })
+      const expectedTurn = currentTurnIndex.value
+      await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
     }
   }
+  
+  await leaveLobby()
   window.location.href = '/'
 }
 
