@@ -591,7 +591,7 @@ const toggleReady = async () => {
   
   const { error } = await supabase
     .from('players')
-    .update({ is_ready: newReadyState })
+    .update({ is_ready: newReadyState, room_id: roomId.value })
     .eq('id', playerId.value)
     
   if (error) {
@@ -821,7 +821,7 @@ const setupRealtimeSubscription = (id) => {
       } else {
         const idx = playersList.value.findIndex(p => p.id === payload.new.id)
         if (idx !== -1) {
-          playersList.value[idx] = payload.new
+          playersList.value.splice(idx, 1, payload.new)
         } else {
           playersList.value.push(payload.new)
           playersList.value.sort((a, b) => a.order_index - b.order_index)
