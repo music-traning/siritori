@@ -821,7 +821,10 @@ const setupRealtimeSubscription = (id) => {
       } else {
         const idx = playersList.value.findIndex(p => p.id === payload.new.id)
         if (idx !== -1) {
-          playersList.value.splice(idx, 1, payload.new)
+          // 【必須】配列を新しく作り直して、Vueに強制的に再描画させる
+          const newList = [...playersList.value]
+          newList[idx] = payload.new
+          playersList.value = newList
         } else {
           playersList.value.push(payload.new)
           playersList.value.sort((a, b) => a.order_index - b.order_index)
