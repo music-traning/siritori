@@ -316,7 +316,17 @@ const toggleReady = async () => {
   const newReadyState = !myPlayer.value.is_ready
   // Optimistic UI update
   myPlayer.value.is_ready = newReadyState
-  await supabase.rpc('toggle_player_ready', { p_player_id: playerId.value, p_is_ready: newReadyState })
+  
+  const { error } = await supabase
+    .from('players')
+    .update({ is_ready: newReadyState })
+    .eq('id', playerId.value)
+    
+  if (error) {
+    console.error('Failed to toggle ready state:', error)
+    // Revert optimistic update on error
+    myPlayer.value.is_ready = !newReadyState
+  }
 }
 
 watch(playersList, (newList) => {
