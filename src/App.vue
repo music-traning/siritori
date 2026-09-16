@@ -625,7 +625,8 @@ const handleAction = async () => {
       await supabase.rpc('update_room_turn', { 
         p_room_id: roomId.value, 
         p_player_id: playerId.value,
-        p_turn_index: getNextTurnIndex(currentTurnIndex.value) 
+        p_turn_index: getNextTurnIndex(currentTurnIndex.value),
+        p_next_char: result.next_char
       })
       
       turnCount.value++
@@ -648,7 +649,8 @@ const handleAction = async () => {
             await supabase.rpc('update_room_turn', { 
               p_room_id: roomId.value, 
               p_player_id: playerId.value,
-              p_turn_index: getNextTurnIndex(currentTurnIndex.value) 
+              p_turn_index: getNextTurnIndex(currentTurnIndex.value),
+              p_next_char: targetLetter.value
             })
             currentState.value = 'initial'
           }
@@ -682,7 +684,8 @@ const passTurn = async () => {
   await supabase.rpc('update_room_turn', { 
     p_room_id: roomId.value, 
     p_player_id: playerId.value,
-    p_turn_index: getNextTurnIndex(currentTurnIndex.value) 
+    p_turn_index: getNextTurnIndex(currentTurnIndex.value),
+    p_next_char: targetLetter.value
   })
 }
 
@@ -703,7 +706,8 @@ const passMyTurn = async () => {
       await supabase.rpc('update_room_turn', { 
         p_room_id: roomId.value, 
         p_player_id: playerId.value,
-        p_turn_index: getNextTurnIndex(currentTurnIndex.value) 
+        p_turn_index: getNextTurnIndex(currentTurnIndex.value),
+        p_next_char: targetLetter.value
       })
       currentState.value = 'initial'
     }
@@ -712,7 +716,8 @@ const passMyTurn = async () => {
     await supabase.rpc('update_room_turn', { 
       p_room_id: roomId.value, 
       p_player_id: playerId.value,
-      p_turn_index: getNextTurnIndex(currentTurnIndex.value) 
+      p_turn_index: getNextTurnIndex(currentTurnIndex.value),
+      p_next_char: targetLetter.value
     })
     currentState.value = 'initial'
   }
@@ -733,7 +738,8 @@ const surrender = async () => {
       await supabase.rpc('update_room_turn', { 
         p_room_id: roomId.value, 
         p_player_id: playerId.value,
-        p_turn_index: getNextTurnIndex(currentTurnIndex.value) 
+        p_turn_index: getNextTurnIndex(currentTurnIndex.value),
+        p_next_char: targetLetter.value
       })
     }
   }
