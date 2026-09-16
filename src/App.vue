@@ -155,6 +155,9 @@ const joinRandomRoom = async () => {
     if (!playerName.value.trim() || playerName.value.length > 10) return
     localStorage.setItem('shiritori_player_name', playerName.value)
     
+    // 過去の亡霊レコードが残っているとRPCで弾かれるため、入室前に確実に消去する
+    await supabase.from('players').delete().eq('id', playerId.value)
+
     // 中級、HP3固定
     difficulty.value = 'normal'
     initialHp.value = 3
@@ -212,6 +215,9 @@ const joinOrCreateRoom = async () => {
     if (playerName.value.length > 10) return
     
     localStorage.setItem('shiritori_player_name', playerName.value)
+    
+    // 過去の亡霊レコードが残っているとRPCで弾かれるため、入室前に確実に消去する
+    await supabase.from('players').delete().eq('id', playerId.value)
 
     if (roomId.value) {
       // Join existing room
@@ -483,6 +489,8 @@ const setupRealtimeSubscription = (id) => {
       if (idx !== -1) {
         playersList.value[idx] = payload.new
       }
+    } else if (payload.eventType === 'DELETE') {
+      playersList.value = playersList.value.filter(p => p.id !== payload.old.id)
     }
   }).subscribe()
 
