@@ -1489,8 +1489,11 @@ const goBackToTop = async () => {
           </button>
         </div>
         <footer class="mt-6 flex flex-col gap-2 items-center">
-          <a href="#" @click.prevent="showRulesModal = true" class="text-xs text-slate-500 underline hover:text-slate-700 font-bold">利用ルール・安全ガイド🔰</a>
-          <a href="https://note.com/jazzy_begin" target="_blank" rel="noopener noreferrer" class="text-[12px] text-slate-500 hover:text-cyan-600 font-medium tracking-widest underline decoration-slate-300 underline-offset-4">© United Make Associates</a>
+          <div class="flex items-center gap-4">
+            <a href="#" @click.prevent="showRulesModal = true" class="text-xs text-slate-500 underline hover:text-slate-700 font-bold">利用ルール・安全ガイド🔰</a>
+            <a href="https://forms.gle/YXWKWkTRPWFBArfo7" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 underline hover:text-slate-700 font-bold">ご意見・お問い合わせ 📮</a>
+          </div>
+          <a href="https://note.com/jazzy_begin" target="_blank" rel="noopener noreferrer" class="text-[12px] text-slate-500 hover:text-cyan-600 font-medium tracking-widest underline decoration-slate-300 underline-offset-4">&copy; United Make Associates</a>
         </footer>
       </div>
     </template>
@@ -1552,6 +1555,13 @@ const goBackToTop = async () => {
             退出する 🚪
           </button>
         </div>
+        <footer class="mt-6 flex flex-col gap-2 items-center">
+          <div class="flex items-center gap-4">
+            <a href="#" @click.prevent="showRulesModal = true" class="text-xs text-slate-500 underline hover:text-slate-700 font-bold">利用ルール・安全ガイド🔰</a>
+            <a href="https://forms.gle/YXWKWkTRPWFBArfo7" target="_blank" rel="noopener noreferrer" class="text-xs text-slate-500 underline hover:text-slate-700 font-bold">ご意見・お問い合わせ 📮</a>
+          </div>
+          <a href="https://note.com/jazzy_begin" target="_blank" rel="noopener noreferrer" class="text-[12px] text-slate-500 hover:text-cyan-600 font-medium tracking-widest underline decoration-slate-300 underline-offset-4">&copy; United Make Associates</a>
+        </footer>
       </div>
     </template>
 
