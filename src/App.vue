@@ -2,6 +2,13 @@
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { supabase } from './supabase'
 import { initAudio, playShutter, playSuccess, playFailure, playGameOver as _playGameOver } from './audio'
+import RulesModal from './components/RulesModal.vue'
+import ReportModal from './components/ReportModal.vue'
+
+const showRulesModal = ref(false)
+const showReportModal = ref(false)
+const reportTarget = ref(null)
+const showCameraWarning = ref(false)
 
 // Global State
 const currentMode = ref('join') // 'join', 'lobby', 'play', 'history'
@@ -140,6 +147,44 @@ watch(currentMode, (newMode) => {
   }
 })
 
+
+watch([currentMode, currentState], ([newMode, newState]) => {
+  if (newMode === 'play' && newState === 'initial') {
+    const hasSeen = localStorage.getItem('shiritori_camera_warning_shown')
+    if (!hasSeen) {
+      showCameraWarning.value = true
+      setTimeout(() => {
+        showCameraWarning.value = false
+      }, 4000)
+      localStorage.setItem('shiritori_camera_warning_shown', '1')
+    }
+  }
+})
+
+const openReport = (targetPlayerId, targetWordId = null) => {
+  if (targetPlayerId === playerId.value) return
+  reportTarget.value = { playerId: targetPlayerId, wordId: targetWordId }
+  showReportModal.value = true
+}
+
+const handleReportSubmit = async (reason) => {
+  showReportModal.value = false
+  if (!reportTarget.value) return
+  try {
+    const { error } = await supabase.from('reports').insert({
+      room_id: roomId.value,
+      reporter_id: playerId.value,
+      target_player_id: reportTarget.value.playerId,
+      target_word_id: reportTarget.value.wordId,
+      reason: reason
+    })
+    if (error) throw error
+    alert('報告を受け付けました。ご協力ありがとうございます🙇‍♂️')
+  } catch (e) {
+    console.error('Report error:', e)
+    alert('報告の送信に失敗しました💦')
+  }
+}
 const leaveLobby = async () => {
   if (heartbeatInterval) {
     clearInterval(heartbeatInterval)
@@ -533,7 +578,9 @@ const setupRealtimeSubscription = (id) => {
       const playerName = getPlayerName(word.player_id) || '友達'
       chatData.value = {
         text: `👤${playerName}: 『${word.detected_word}』📸\n${word.comment || '判定成功！次へ繋ぎます✨'}`,
-        image: word.image_base64 || null
+        image: word.image_base64 || null,
+        playerId: word.player_id,
+        wordId: word.id
       }
       currentState.value = 'initial'
       capturedImage.value = null
@@ -1089,7 +1136,9 @@ const goBackToTop = async () => {
 
           <label class="flex items-center justify-start w-full cursor-pointer bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] mt-4 gap-2">
             <input type="checkbox" v-model="isAgreed" class="w-5 h-5 rounded border-slate-800 text-cyan-500 focus:ring-cyan-500" />
-            <span class="text-slate-700 text-xs font-bold leading-tight flex-1">利用規約とプライバシーポリシーに同意する</span>
+            <span class="text-slate-700 text-xs font-bold leading-tight flex-1">
+              <a href="#" @click.prevent="showRulesModal = true" class="text-cyan-600 underline hover:text-cyan-500">利用ルール・安全ガイド</a>とプライバシーポリシーに同意する
+            </span>
           </label>
 
           <button 
@@ -1109,10 +1158,11 @@ const goBackToTop = async () => {
             :class="!roomId ? 'bg-yellow-400 hover:bg-yellow-300 active:shadow-[0_0px_0_0_#ca8a04] active:translate-y-[6px]' : 'bg-cyan-400 hover:bg-cyan-300 text-white shadow-[0_6px_0_0_#0891b2] active:shadow-[0_0px_0_0_#0891b2] active:translate-y-[6px]'"
           >
             <span v-if="isJoining">通信中...</span>
-            <span v-else>{{ !roomId ? '部屋を作る' : '部屋に参加' }}</span>
+            <span v-else>{{ !roomId ? '友達と遊ぶ🤝' : '部屋に参加🤝' }}</span>
           </button>
         </div>
-        <footer class="mt-8 text-center">
+        <footer class="mt-6 flex flex-col gap-2 items-center">
+          <a href="#" @click.prevent="showRulesModal = true" class="text-xs text-slate-500 underline hover:text-slate-700 font-bold">利用ルール・安全ガイド🔰</a>
           <a href="https://note.com/jazzy_begin" target="_blank" rel="noopener noreferrer" class="text-[12px] text-slate-500 hover:text-cyan-600 font-medium tracking-widest underline decoration-slate-300 underline-offset-4">© United Make Associates</a>
         </footer>
       </div>
@@ -1200,7 +1250,10 @@ const goBackToTop = async () => {
                   {{ item.detected_word }} <span class="text-sm text-slate-400">({{ item.reading }})</span>
                 </p>
                 <p class="text-xs text-slate-600 mt-1 line-clamp-3 leading-snug">{{ item.comment }}</p>
-                <p v-if="item.player_id" class="text-[10px] text-slate-400 mt-1 text-right font-medium">👤 {{ getPlayerName(item.player_id) }}</p>
+                <div class="flex justify-between items-end mt-1">
+                  <p v-if="item.player_id" class="text-[10px] text-slate-400 font-medium">👤 {{ getPlayerName(item.player_id) }}</p>
+                  <button v-if="item.player_id && item.player_id !== playerId" @click="openReport(item.player_id, item.id)" class="text-[10px] text-red-400 underline hover:text-red-500 font-bold">🚨 報告</button>
+                </div>
               </div>
            </div>
         </div>
@@ -1256,6 +1309,7 @@ const goBackToTop = async () => {
                  </div>
                </div>
                <p class="text-sm text-slate-700 bg-white/80 p-3 rounded-xl border-2 border-red-200">{{ gameOverData?.comment }}</p>
+               <button v-if="activePlayer?.id && activePlayer?.id !== playerId" @click="openReport(activePlayer?.id)" class="mt-4 text-sm text-red-500 underline decoration-red-300 hover:text-red-600 font-bold bg-white/80 px-3 py-1 rounded-lg">🚨 この結果を報告する</button>
             </div>
           </template>
           
@@ -1295,6 +1349,13 @@ const goBackToTop = async () => {
               <div class="w-full h-1 bg-cyan-400 shadow-[0_0_15px_5px_rgba(34,211,238,0.5)] absolute top-0 animate-scan"></div>
             </div>
             
+            <div v-if="showCameraWarning" class="absolute top-4 left-0 right-0 z-50 flex justify-center animate-fade-in-up pointer-events-none px-4">
+              <div class="bg-slate-900/90 text-white text-xs sm:text-sm font-bold px-4 py-3 rounded-2xl shadow-lg border border-slate-700 flex items-center gap-2">
+                <span>⚠️</span>
+                <span>他人や個人情報が写り込まないよう注意してね📸</span>
+              </div>
+            </div>
+            
             <canvas ref="canvasRef" class="hidden"></canvas>
           </template>
         </div>
@@ -1312,6 +1373,9 @@ const goBackToTop = async () => {
                 <div class="w-2.5 h-2.5 bg-yellow-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
                 <div class="w-2.5 h-2.5 bg-pink-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
               </div>
+              <button v-if="chatData.playerId && chatData.playerId !== playerId" @click="openReport(chatData.playerId, chatData.wordId)" class="mt-1 text-[10px] text-red-400 underline hover:text-red-500 font-bold flex items-center gap-1">
+                <span>🚨</span>報告する
+              </button>
             </div>
             <div v-if="chatData.image" class="shrink-0 flex items-center">
               <img :src="chatData.image" class="w-12 h-12 rounded-lg border-2 border-slate-800 object-cover shadow-sm cursor-pointer hover:scale-105 transition-transform" @click="selectedImage = chatData.image" />
@@ -1368,6 +1432,10 @@ const goBackToTop = async () => {
         </template>
       </div>
     </template>
+    
+    <!-- MODALS -->
+    <RulesModal :isOpen="showRulesModal" @close="showRulesModal = false" />
+    <ReportModal :isOpen="showReportModal" @close="showReportModal = false" @submit="handleReportSubmit" />
   </div>
 </template>
 
