@@ -1688,6 +1688,9 @@ const goBackToTop = async () => {
           <button v-if="isHost" @click="resetGame" class="w-full py-3 rounded-2xl text-lg bg-cyan-400 text-white shadow-[0_4px_0_0_#0891b2] hover:bg-cyan-300 transition-all active:translate-y-[4px] active:shadow-none">
             もう一回遊ぶ？🔁 (ホストのみ)
           </button>
+          <button @click="goBackToTop" class="w-full py-3 mt-2 rounded-2xl text-lg text-slate-500 bg-transparent hover:bg-slate-100 transition-all duration-150 border-2 border-transparent hover:border-slate-200">
+            退出してトップへ戻る 🚪
+          </button>
         </template>
         
         <template v-else>
