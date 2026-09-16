@@ -29,6 +29,8 @@ const isImageShareEnabled = ref(false)
 const difficulty = ref('normal')
 const roomDifficulty = ref('normal')
 const initialHp = ref(3)
+const maxPlayers = ref(5)
+const roomMaxPlayers = ref(5)
 
 // Game State
 const targetLetter = ref('あ')
@@ -83,7 +85,7 @@ const cleanupSubscriptions = async () => {
 
 const startTurnTimeout = () => {
   clearTimeout(turnTimeout)
-  if (isMyTurn.value && currentState.value === 'initial') {
+  if (currentMode.value === 'play' && isMyTurn.value && currentState.value === 'initial') {
     turnTimeout = setTimeout(() => {
       alert('60秒経過したため、自動的にパスしました💨')
       passMyTurn()
@@ -167,7 +169,8 @@ const joinRandomRoom = async () => {
       p_name: String(playerName.value),
       p_hp: 3,
       p_difficulty: 'normal',
-      p_random_char: randomChar
+      p_random_char: randomChar,
+      p_max_players: 5
     })
 
     if (error || !newRoomId) {
@@ -217,7 +220,8 @@ const joinOrCreateRoom = async () => {
           p_room_id: roomId.value,
           p_player_id: playerId.value,
           p_name: String(playerName.value),
-          p_hp: Number(initialHp.value)
+          p_hp: Number(initialHp.value),
+          p_max_players: Number(maxPlayers.value)
         })
         if (pError || !joined) {
           console.error('Player insert error:', pError)
@@ -254,7 +258,8 @@ const joinOrCreateRoom = async () => {
         current_turn_index: 0,
         host_id: playerId.value,
         difficulty: String(difficulty.value),
-        initial_hp: Number(initialHp.value)
+        initial_hp: Number(initialHp.value),
+        max_players: Number(maxPlayers.value)
       }]).select().single()
 
       if (error || !newRoom) {
@@ -267,7 +272,8 @@ const joinOrCreateRoom = async () => {
         p_room_id: newRoom.id,
         p_player_id: playerId.value,
         p_name: String(playerName.value),
-        p_hp: Number(newRoom.initial_hp || initialHp.value)
+        p_hp: Number(newRoom.initial_hp || initialHp.value),
+        p_max_players: Number(maxPlayers.value)
       })
       
       if (pError || !joined) {
@@ -413,6 +419,7 @@ const fetchRoomData = async (id) => {
     isPublicRoom.value = !!roomData.is_public
     roomDifficulty.value = roomData.difficulty || 'normal'
     initialHp.value = roomData.initial_hp || 3
+    roomMaxPlayers.value = roomData.max_players || 5
     chatData.value = { text: `さあ、何撮る？まずは『${targetLetter.value}』から始まるもの見つけてよ😁`, image: null }
   }
 
@@ -1031,6 +1038,19 @@ const goBackToTop = async () => {
               <option :value="10">10</option>
             </select>
           </div>
+          <div v-if="!roomId" class="w-full mt-2">
+            <label class="block text-slate-700 text-sm mb-1 ml-1">定員 (2〜8人) 👥</label>
+            <select v-model="maxPlayers" class="w-full p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] text-center text-lg focus:outline-none focus:border-cyan-500 bg-white cursor-pointer appearance-none">
+              <option :value="2">2</option>
+              <option :value="3">3</option>
+              <option :value="4">4</option>
+              <option :value="5">5</option>
+              <option :value="6">6</option>
+              <option :value="7">7</option>
+              <option :value="8">8</option>
+            </select>
+          </div>
+
 
           <label v-if="!roomId" class="flex items-center justify-between w-full cursor-pointer bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] mt-2">
             <span class="text-slate-700 text-sm">画像を共有する📸</span>
@@ -1077,7 +1097,7 @@ const goBackToTop = async () => {
       <div class="z-10 flex flex-col items-center justify-center flex-1 w-full gap-4 max-w-sm my-auto py-4">
         <h2 class="text-2xl text-slate-800 font-black mb-2">待機ロビー 🛋️</h2>
         <div class="w-full bg-white rounded-2xl border-4 border-slate-800 shadow-[0_6px_0_0_#1e293b] p-4 flex flex-col gap-3">
-          <h3 class="text-slate-500 text-sm text-center border-b-2 border-dashed border-slate-200 pb-2">現在の参加者 ({{ playersList.length }}/5)</h3>
+          <h3 class="text-slate-500 text-sm text-center border-b-2 border-dashed border-slate-200 pb-2">現在の参加者 ({{ playersList.length }}/{{ roomMaxPlayers }})</h3>
           <ul class="space-y-2">
             <li v-for="(p, idx) in playersList" :key="p.id" class="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border-2 border-slate-200" :class="{'opacity-50 grayscale': p.hp <= 0}">
               <span class="w-6 h-6 rounded-full bg-cyan-400 text-white flex items-center justify-center text-xs shrink-0">{{ idx + 1 }}</span>
