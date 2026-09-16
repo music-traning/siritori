@@ -808,28 +808,32 @@ const setupRealtimeSubscription = (id) => {
   }).subscribe(handleStatus)
 
   // Listen to Players (変数 playerChannel に格納)
-  const playerChannel = supabase.channel(`players-${id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${id}` }, (payload) => {
+  const playerChannel = supabase.channel(`players-${id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, (payload) => {
     if (payload.eventType === 'INSERT') {
-      if (!playersList.value.find(p => p.id === payload.new.id)) {
+      if (payload.new.room_id === id && !playersList.value.find(p => p.id === payload.new.id)) {
         playersList.value.push(payload.new)
         playersList.value.sort((a, b) => a.order_index - b.order_index)
       }
     } else if (payload.eventType === 'UPDATE') {
-      if (payload.new.room_id !== id) {
-        // Player left the room by setting room_id to null or another room
-        playersList.value = playersList.value.filter(p => p.id !== payload.new.id)
-      } else {
-        const idx = playersList.value.findIndex(p => p.id === payload.new.id)
-        if (idx !== -1) {
-          // 【重要】spliceを使って、Vueに強制的に再描画させる
-          playersList.value.splice(idx, 1, payload.new)
-        } else {
-          playersList.value.push(payload.new)
-          playersList.value.sort((a, b) => a.order_index - b.order_index)
-        }
+      const idx = playersList.value.findIndex(p => p.id === payload.new.id)
+      
+      // If room_id is explicitly set to something else (e.g., null when leaving)
+      if (payload.new.room_id !== undefined && payload.new.room_id !== id) {
+        if (idx !== -1) playersList.value.splice(idx, 1)
+        return
+      }
+
+      if (idx !== -1) {
+        // Merge to preserve fields that Postgres optimized out from the payload
+        const updatedPlayer = { ...playersList.value[idx], ...payload.new }
+        playersList.value.splice(idx, 1, updatedPlayer)
+      } else if (payload.new.room_id === id) {
+        playersList.value.push(payload.new)
+        playersList.value.sort((a, b) => a.order_index - b.order_index)
       }
     } else if (payload.eventType === 'DELETE') {
-      playersList.value = playersList.value.filter(p => p.id !== payload.old.id)
+      const idx = playersList.value.findIndex(p => p.id === payload.old.id)
+      if (idx !== -1) playersList.value.splice(idx, 1)
     }
   }).subscribe(handleStatus)
 
