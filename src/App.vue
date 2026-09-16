@@ -182,18 +182,20 @@ const joinRandomRoom = async () => {
     roomId.value = newRoomId
     localStorage.setItem('shiritori_player_id', playerId.value)
     
-    // ユーザー指示: 再度 SELECT を行い自身のプレイヤー情報を取得しローカルにセット
-    const { data: fetchedPlayer, error: fetchErr } = await supabase.from('players').select('*').eq('id', playerId.value).single()
-    if (fetchErr) {
-      console.error('Player fetch error:', fetchErr)
-    } else if (fetchedPlayer) {
-      // 重複を防ぐ
-      if (!playersList.value.find(p => p.id === fetchedPlayer.id)) {
-        playersList.value.push(fetchedPlayer)
-      }
-    }
-    
     await fetchRoomData(newRoomId)
+    
+    // フォールバック安全装置: もしRPC内の挿入が何らかの理由で弾かれていたら強制挿入する
+    if (!playersList.value.find(p => p.id === playerId.value)) {
+      console.warn('Player was not inserted by RPC. Using fallback insert.')
+      await supabase.from('players').insert({
+        id: playerId.value,
+        room_id: newRoomId,
+        name: String(playerName.value),
+        hp: 3,
+        order_index: playersList.value.length
+      })
+      await fetchRoomData(newRoomId)
+    }
     
     window.history.pushState({}, '', `/?room=${newRoomId}`)
     setupRealtimeSubscription(newRoomId)
@@ -525,8 +527,39 @@ const setupRealtimeSubscription = (id) => {
     }
   }).subscribe()
 
-  // 【追加】作成した3つのチャンネルを配列に保存し、unmount時に破棄できるようにする
-  activeChannels.push(roomChannel, playerChannel, wordChannel)
+  const presenceChannel = supabase.channel(`presence-${id}`, {
+    config: {
+      presence: {
+        key: playerId.value
+      }
+    }
+  })
+
+  presenceChannel.on('presence', { event: 'sync' }, () => {
+    if (roomStatus.value !== 'waiting') return
+
+    const presenceState = presenceChannel.presenceState()
+    const onlineIds = Object.keys(presenceState)
+
+    playersList.value.forEach(p => {
+      if (!onlineIds.includes(p.id)) {
+        setTimeout(() => {
+          const currentState = presenceChannel.presenceState()
+          const currentOnlineIds = Object.keys(currentState)
+          if (!currentOnlineIds.includes(p.id)) {
+            // Found a ghost -> Delete
+            supabase.from('players').delete().eq('id', p.id).then()
+          }
+        }, 3000)
+      }
+    })
+  }).subscribe(async (status) => {
+    if (status === 'SUBSCRIBED') {
+      await presenceChannel.track({ id: playerId.value })
+    }
+  })
+
+  activeChannels.push(roomChannel, playerChannel, wordChannel, presenceChannel)
 }
 
 // --- Gameplay Logic ---
