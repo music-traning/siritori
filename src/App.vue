@@ -104,6 +104,40 @@ watch([currentTurnIndex, currentState, isMyTurn], () => {
   startTurnTimeout()
 })
 
+const isRecovering = ref(false)
+
+const recoverGameState = async (id) => {
+  await fetchRoomData(id)
+  if (!hostId.value) return false // Room not found
+
+  const myPlayer = playersList.value.find(p => p.id === playerId.value)
+  if (!myPlayer) return false // Not in room
+
+  setupRealtimeSubscription(id)
+
+  if (roomStatus.value === 'playing') {
+    currentMode.value = 'play'
+    startCamera()
+  } else if (roomStatus.value === 'gameover' || roomStatus.value === 'clear') {
+    currentMode.value = 'play'
+    const { data: lastWord } = await supabase.from('words').select('*').eq('room_id', id).order('created_at', { ascending: false }).limit(1).single()
+    if (lastWord) {
+      gameOverData.value = {
+        word: lastWord.detected_word,
+        reading: lastWord.reading,
+        comment: lastWord.comment,
+        image: lastWord.image_base64,
+        wordId: lastWord.id
+      }
+    }
+    currentState.value = roomStatus.value
+  } else {
+    currentMode.value = 'lobby'
+    startHeartbeat()
+  }
+  return true
+}
+
 onMounted(async () => {
   let storedId = localStorage.getItem('shiritori_player_id')
   if (!storedId) {
@@ -121,9 +155,19 @@ onMounted(async () => {
   const room = params.get('room')
   if (room) {
     roomId.value = room
+    isRecovering.value = true
+    const success = await recoverGameState(room)
+    if (!success) {
+      alert('部屋に復帰できませんでした（退出済みか満室です）💦')
+      roomId.value = null
+      window.history.replaceState({}, '', '/')
+      currentMode.value = 'join'
+    }
+    isRecovering.value = false
+  } else {
+    currentMode.value = 'join'
   }
   
-  currentMode.value = 'join'
   window.addEventListener('beforeunload', handleBeforeUnload)
   window.addEventListener('popstate', handleBeforeUnload)
 })
@@ -1070,6 +1114,12 @@ const goBackToTop = async () => {
     <div class="absolute top-[-50px] left-[-50px] w-32 h-32 bg-yellow-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob pointer-events-none z-0"></div>
     <div class="absolute top-[20%] right-[-50px] w-32 h-32 bg-cyan-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-2000 pointer-events-none z-0"></div>
     <div class="absolute bottom-[-50px] left-[20%] w-40 h-40 bg-purple-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob animation-delay-4000 pointer-events-none z-0"></div>
+
+    <!-- Recovering Overlay -->
+    <div v-if="isRecovering" class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm text-white">
+      <div class="text-6xl mb-4 animate-bounce">🔄</div>
+      <p class="text-xl font-bold animate-pulse">ゲームに復帰中...</p>
+    </div>
 
     <!-- Image Modal -->
     <div v-if="selectedImage" class="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm transition-opacity" @click="selectedImage = null">
