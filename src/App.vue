@@ -155,9 +155,6 @@ const joinRandomRoom = async () => {
     if (!playerName.value.trim() || playerName.value.length > 10) return
     localStorage.setItem('shiritori_player_name', playerName.value)
     
-    // 過去の亡霊レコードが残っているとRPCで弾かれるため、入室前に確実に消去する
-    await supabase.from('players').delete().eq('id', playerId.value)
-
     // 中級、HP3固定
     difficulty.value = 'normal'
     initialHp.value = 3
@@ -184,19 +181,6 @@ const joinRandomRoom = async () => {
     
     await fetchRoomData(newRoomId)
     
-    // フォールバック安全装置: もしRPC内の挿入が何らかの理由で弾かれていたら強制挿入する
-    if (!playersList.value.find(p => p.id === playerId.value)) {
-      console.warn('Player was not inserted by RPC. Using fallback insert.')
-      await supabase.from('players').insert({
-        id: playerId.value,
-        room_id: newRoomId,
-        name: String(playerName.value),
-        hp: 3,
-        order_index: playersList.value.length
-      })
-      await fetchRoomData(newRoomId)
-    }
-    
     window.history.pushState({}, '', `/?room=${newRoomId}`)
     setupRealtimeSubscription(newRoomId)
     currentMode.value = 'lobby'
@@ -218,9 +202,6 @@ const joinOrCreateRoom = async () => {
     
     localStorage.setItem('shiritori_player_name', playerName.value)
     
-    // 過去の亡霊レコードが残っているとRPCで弾かれるため、入室前に確実に消去する
-    await supabase.from('players').delete().eq('id', playerId.value)
-
     if (roomId.value) {
       // Join existing room
       await fetchRoomData(roomId.value)
