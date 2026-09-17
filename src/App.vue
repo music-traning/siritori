@@ -1123,7 +1123,40 @@ const handleAction = async () => {
     if (!response.ok) throw new Error('API request failed')
     const result = await response.json()
 
-    if (result.is_game_over || result.reading?.endsWith('ん') || result.next_char === 'ん') {
+    if (result.is_inappropriate) {
+      // 悪意のあるユーザー対策として、不適切判定の場合もHPを1減らす（画像アップロードは絶対に行わない）
+      const myPlayer = playersList.value.find(p => p.id === playerId.value)
+      if (myPlayer) {
+        const expectedHp = myPlayer.hp
+        const newHp = Math.max(0, expectedHp - 1)
+        const hpSuccess = await safeUpdatePlayerHp(playerId.value, expectedHp, newHp, roomId.value)
+        if (!hpSuccess) {
+          currentState.value = 'initial'
+          return
+        }
+        
+        playFailure()
+        chatData.value = { text: result.comment || '不適切な画像のため弾かれました🚨', image: null }
+        myPlayer.hp = newHp
+        
+        if (newHp <= 0) {
+          const isOver = await checkWinCondition()
+          if (!isOver) {
+            const expectedTurn = currentTurnIndex.value
+            const turnSuccess = await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
+            if (!turnSuccess) {
+              currentState.value = 'initial'
+              return
+            }
+            currentState.value = 'initial'
+          }
+        } else {
+          currentState.value = 'failure'
+        }
+      } else {
+        currentState.value = 'failure'
+      }
+    } else if (result.is_game_over || result.reading?.endsWith('ん') || result.next_char === 'ん') {
       const statusSuccess = await safeUpdateRoomStatus(roomId.value, 'playing', 'gameover')
       if (!statusSuccess) {
         currentState.value = 'initial'

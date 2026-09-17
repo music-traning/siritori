@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 
 export const config = {
   runtime: 'edge',
@@ -32,7 +32,13 @@ export default async function handler(request) {
       model: 'gemini-3.5-flash-lite',
       generationConfig: {
         responseMimeType: 'application/json',
-      }
+      },
+      safetySettings: [
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE }
+      ]
     });
 
     let extraInstruction = '';
@@ -62,12 +68,7 @@ export default async function handler(request) {
 【あなたの性格と口調】
 ${characterStyle}
 
-【絶対的な安全基準（最優先モデレーション）】
-以下の内容が画像に少しでも含まれている場合は、いかなる理由であっても即座に \`is_valid: false\` とし、しりとり判定を無効化してください。
-1. 人物の顔や姿（イラストやキャラクターは許容しますが、実在の人物はNG）
-2. 個人を特定できる情報（名札、免許証、住所、電話番号など）
-3. NSFW（暴力、裸体、公序良俗に反する内容）
-このルールに抵触した場合は、\`comment\` に「プライバシー保護のため、人物や個人情報が写っている画像は使用できません🙅‍♀️」または「不適切な画像のため判定できません🙅‍♀️」と記載してください。
+【絶対的な安全基準（最優先モチベーション）】\n以下の内容が画像に少しでも含まれている場合は、いかなる理由であっても即座に is_valid: false および is_inappropriate: true とし、しりとり判定を無効化してください。\n1. 人物の顔や姿（イラストやキャラクターは許容しますが、実在の人物はNG）\n2. 個人を特定できる情報（名札、免許証、マイナンバーカード、クレジットカード、住所、電話番号など）\n3. NSFW（過激な性的表現、暴力、グロテスクな表現、裸体、公序良俗に反する内容）\nこのルールに抵触した場合は、comment に「不適切な画像、または個人情報が含まれているため弾かれました🚨」と記載してください。
 
 【判定ルール】
 現在の文字は「${lastChar}」です。提供された画像に対して判定してください。
@@ -88,6 +89,7 @@ ${difficultyRule}
   "reading_first_char": string, // 認識した単語(reading)の「最初の1文字」を抽出して記載する
   "is_match_first_char": boolean, // お題の文字（${lastChar}）と reading_first_char が完全に一致しているか
   "is_valid": boolean, // しりとり成立ならtrue、不成立ならfalse
+  "is_inappropriate": boolean, // NSFWや個人情報が含まれている場合はtrue
   "is_game_over": boolean, // 判定した単語が「ん」で終わった場合はtrue
   "detected_word": string, // 判定した被写体名
   "reading": string, // 読み仮名（必ずひらがなのみ）
@@ -118,6 +120,17 @@ ${extraInstruction}
 
   } catch (error) {
     console.error('API Error:', error);
+    if (error.message && (error.message.includes('SAFETY') || error.message.includes('safety'))) {
+      return new Response(JSON.stringify({ 
+        is_inappropriate: true, 
+        is_valid: false, 
+        is_game_over: false,
+        comment: '不適切な画像としてGoogleの安全フィルターにブロックされました🚨' 
+      }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
     return new Response(JSON.stringify({ error: 'Internal Server Error', details: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
