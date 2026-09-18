@@ -498,9 +498,12 @@ const joinRandomRoom = async () => {
 
     if (error || !newRoomId) {
       console.error('Random match error:', error)
-      alert('マッチングに失敗しました💦')
+      alert('エラーが発生しました💦')
       return
     }
+
+    // RPCが既存プレイヤーの名前を更新しない場合があるため、明示的にUPDATEする
+    await supabase.from('players').update({ name: String(playerName.value) }).eq('id', playerId.value)
 
     roomId.value = newRoomId
     localStorage.setItem('shiritori_player_id', playerId.value)
@@ -552,6 +555,8 @@ const joinOrCreateRoom = async () => {
           return
         }
         
+        await supabase.from('players').update({ name: String(playerName.value) }).eq('id', playerId.value)
+        
         localStorage.setItem('shiritori_player_id', playerId.value)
         
         const { data: fetchedPlayer, error: fetchErr } = await supabase.from('players').select('*').eq('id', playerId.value).single()
@@ -562,6 +567,12 @@ const joinOrCreateRoom = async () => {
         }
         
         await fetchRoomData(roomId.value)
+      } else {
+        // すでに部屋にいる場合でも名前の変更を反映させる
+        if (myPlayer.name !== playerName.value) {
+          await supabase.from('players').update({ name: String(playerName.value) }).eq('id', playerId.value)
+          myPlayer.name = playerName.value
+        }
       }
       setupRealtimeSubscription(roomId.value)
       currentMode.value = roomStatus.value === 'playing' ? 'play' : 'lobby'
@@ -584,11 +595,14 @@ const joinOrCreateRoom = async () => {
       }]).select().single()
 
       if (error || !newRoom) {
-        console.error('Room creation error:', error)
-        alert('部屋の作成に失敗しました😢')
+        console.error('Room create error:', error)
+        alert('部屋の作成に失敗しました💦')
         return
       }
 
+      await supabase.from('players').update({ name: String(playerName.value) }).eq('id', playerId.value)
+
+      roomId.value = newRoom.id
       const { data: joined, error: pError } = await supabase.rpc('join_room', {
         p_room_id: newRoom.id,
         p_player_id: playerId.value,
