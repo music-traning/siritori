@@ -869,6 +869,11 @@ const setupRealtimeSubscription = (id) => {
   const roomChannel = supabase.channel(`rooms-${id}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${id}` }, async (payload) => {
     const room = payload.new
     
+    // 無条件でステータスを即座に同期（ドクロ画面で止まるバグの修正）
+    if (room.status === 'clear' || room.status === 'gameover') {
+      currentState.value = room.status
+    }
+
     if (room.status === 'playing') {
       if (currentMode.value === 'lobby') {
         currentMode.value = 'play'
@@ -903,7 +908,6 @@ const setupRealtimeSubscription = (id) => {
       } else {
         playGameOver()
       }
-      currentState.value = room.status
     }
 
     currentTurnIndex.value = room.current_turn_index
@@ -1594,22 +1598,20 @@ const goBackToTop = async () => {
            <div 
              v-for="(item, index) in historyList" 
              :key="item.id || index" 
-             class="bg-white p-3 rounded-2xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] flex gap-3 items-start"
+             class="bg-white p-3 rounded-2xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] flex flex-col gap-2 items-start"
              :class="{'border-red-500 shadow-[0_4px_0_0_#ef4444]': item.next_char === 'ん'}"
            >
-              <div class="shrink-0 flex flex-col items-center gap-1">
-                <span class="text-xs text-slate-400 font-black">#{{ index + 1 }}</span>
-                <img v-if="item.image_base64" :src="item.image_base64" class="w-16 h-16 object-cover rounded-xl border-2 border-slate-800 cursor-pointer hover:opacity-80" @click="selectedImage = item.image_base64" />
-                <div v-else class="w-16 h-16 bg-slate-100 rounded-xl border-2 border-slate-300 flex items-center justify-center text-slate-400 text-xs">No img</div>
-              </div>
-              <div class="flex-1 min-w-0">
-                <p class="text-lg leading-tight truncate text-cyan-600" :class="{'text-red-500': item.next_char === 'ん'}">
+              <div class="flex items-center gap-2 w-full">
+                <span class="text-xs text-slate-400 font-black shrink-0">#{{ index + 1 }}</span>
+                <p class="text-lg leading-tight truncate text-cyan-600 flex-1" :class="{'text-red-500': item.next_char === 'ん'}">
                   {{ item.detected_word }} <span class="text-sm text-slate-400">({{ item.reading }})</span>
                 </p>
-                <p class="text-xs text-slate-600 mt-1 line-clamp-3 leading-snug">{{ item.comment }}</p>
+              </div>
+              <div class="w-full">
+                <p class="text-xs text-slate-600 line-clamp-3 leading-snug">{{ item.comment }}</p>
                 <div class="flex justify-between items-end mt-1">
                   <p v-if="item.player_id" class="text-[10px] text-slate-400 font-medium">👤 {{ getPlayerName(item.player_id) }}</p>
-                  <button v-if="item.player_id && item.player_id !== playerId" @click="openReport(item.player_id, item.id)" class="text-[10px] text-red-400 underline hover:text-red-500 font-bold">🚨 報告</button>
+                  <button v-if="item.player_id && item.player_id !== playerId" @click="openReport(item.player_id, item.id)" class="text-[10px] text-red-400 underline hover:text-red-500 font-bold">🚨 通報</button>
                 </div>
               </div>
            </div>
