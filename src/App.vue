@@ -868,6 +868,7 @@ const setupRealtimeSubscription = (id) => {
     
     // 辟｡譚｡莉ｶ縺ｧ繧ｹ繝・・繧ｿ繧ｹ繧貞叉蠎ｧ縺ｫ蜷梧悄・医ラ繧ｯ繝ｭ逕ｻ髱｢縺ｧ豁｢縺ｾ繧九ヰ繧ｰ縺ｮ菫ｮ豁｣・・    if (room.status === 'clear' || room.status === 'gameover') {
       currentState.value = room.status
+      isJudging.value = false
     }
 
     if (room.status === 'playing') {
@@ -1200,6 +1201,7 @@ const handleAction = async () => {
     capturedImage.value = null
     if (videoRef.value) videoRef.value.play()
   } finally {
+    isJudging.value = false
     if (currentState.value !== 'gameover' && currentState.value !== 'clear') {
       isProcessingGameOver.value = false
     }
@@ -1649,13 +1651,13 @@ const goBackToTop = async () => {
              
           <template v-if="currentState === 'gameover' || currentState === 'clear'">
             <div class="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-pulse-once">
-               <h2 class="text-5xl mb-2 drop-shadow-md text-red-500 transform -rotate-3 font-black tracking-widest">GAMEOVER</h2>
+               <h2 class="text-5xl mb-2 drop-shadow-md transform -rotate-3 font-black tracking-widest" :class="currentState === 'clear' ? 'text-yellow-400' : 'text-red-500'">{{ currentState === 'clear' ? 'GAME CLEAR✨' : 'GAMEOVER' }}</h2>
                <div class="bg-white p-4 rounded-2xl border-4 border-slate-800 shadow-[6px_6px_0_0_#1e293b] my-4 w-full relative">
                  <p class="text-sm text-slate-500 mb-1 font-black">
                    <template v-if="gameOverData?.word === '蜈ｨ貊・">谿句ｿｵ...蜈ｨ蜩｡閼ｱ關ｽ�逐</template>
                    <template v-else-if="gameOverData?.word === '蠑輔″蛻・￠' || gameOverData?.word === '10繧ｿ繝ｼ繝ｳ驕疲・'">縺願ｦ倶ｺ具ｼ・0繧ｿ繝ｼ繝ｳ螳瑚ｵｰ�脂</template>
                    <template v-else-if="gameOverData?.word === '蜆ｪ蜍・ || gameOverData?.word === '繧ｵ繝舌う繝舌Ν蜍晏茜'">蜍晁・ｱｺ螳夲ｼÅ汨・/template>
-                   <template v-else>譛蠕後↓縲後ｓ縲阪′縺､縺・◆蜊倩ｪ・/template>
+                   <template v-else>最後の単語（脱落理由）</template>
                  </p>
                  <p class="text-3xl text-slate-800 mb-2 underline decoration-red-500 decoration-4 underline-offset-4">{{ gameOverData?.word }}</p>
                  <p class="text-sm text-slate-600">({{ gameOverData?.reading }})</p>
