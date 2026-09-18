@@ -1849,4 +1849,18 @@ const goBackToTop = async () => {
   100% { transform: scale(1); }
 }
 .animate-pulse-once { animation: pulse-once 0.3s ease-out; }
+
+/* スマホでの横揺れ・横スクロールを完全に防止 */
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+  position: relative;
+  /* iOS Safariのバウンススクロール時の背景色をなじませる（必要に応じて） */
+  background-color: #fdf2f8; 
+}
+
+#app {
+  overflow-x: hidden;
+  width: 100%;
+}
 </style>
