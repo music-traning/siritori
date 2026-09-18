@@ -48,6 +48,8 @@ const showCameraWarning = ref(false)
 // Global State
 const currentMode = ref('join') // 'rule-create', 'join', 'lobby', 'play', 'history'
 const roomId = ref(null)
+const onlineCount = ref(1)
+let globalPresenceChannel = null
 const roomStatus = ref('waiting')
 const hostId = ref(null)
 const roomShareEnabled = ref(false)
@@ -220,6 +222,24 @@ const recoverGameState = async (id) => {
 }
 
 onMounted(async () => {
+  globalPresenceChannel = supabase.channel('global-online');
+  globalPresenceChannel
+    .on('presence', { event: 'sync' }, () => {
+      const state = globalPresenceChannel.presenceState();
+      let count = 0;
+      for (const key in state) {
+        count += state[key].length;
+      }
+      onlineCount.value = count;
+    })
+    .subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        await globalPresenceChannel.track({
+          online_at: new Date().toISOString(),
+        });
+      }
+    });
+
   let storedId = localStorage.getItem('shiritori_player_id')
   if (!storedId) {
     storedId = crypto.randomUUID()
@@ -388,6 +408,9 @@ const handleBeforeUnload = (e) => {
 }
 
 onUnmounted(async () => {
+  if (globalPresenceChannel) {
+    await supabase.removeChannel(globalPresenceChannel);
+  }
   if (heartbeatInterval) clearInterval(heartbeatInterval)
   window.removeEventListener('beforeunload', handleBeforeUnload)
   window.removeEventListener('popstate', handleBeforeUnload)
@@ -1445,9 +1468,16 @@ const goBackToTop = async () => {
     <template v-else-if="currentMode === 'join'">
       <button @click="showHowToPlayModal = true" class="absolute top-4 right-4 z-50 bg-white border-2 border-slate-800 rounded-full px-4 py-1.5 text-sm font-bold shadow-[0_4px_0_0_#1e293b] active:shadow-none active:translate-y-[4px] text-slate-700 transition-all flex items-center gap-1"><span>�当</span>驕翫・譁ｹ</button>
       <div class="z-10 flex flex-col items-center justify-center flex-1 w-full gap-8 my-auto py-4">
-        <h1 class="text-4xl text-slate-800 drop-shadow-sm tracking-wide text-center leading-tight">
+        <div class="flex flex-col items-center"><h1 class="text-4xl text-slate-800 drop-shadow-sm tracking-wide text-center leading-tight">
           繝ｬ繝ｳ繧ｺ縺励ｊ縺ｨ繧・br><span class="text-cyan-500 text-5xl">繧ｪ繝ｳ繝ｩ繧､繝ｳ</span>
         </h1>
+          <div class="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full shadow-sm border border-slate-200 mt-4 animate-fade-in">
+            <span class="relative flex h-3 w-3">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+            </span>
+            <span class="text-sm font-bold text-slate-700">現在のオンライン: {{ onlineCount }}人</span>
+          </div></div>
         <p class="text-slate-600 text-center text-sm">AI縺ｨ荳邱偵↓縲√∩繧薙↑縺ｧ蜀咏悄縺励ｊ縺ｨ繧奇ｼ・/p>
         
         <div class="flex flex-col items-center gap-4 mt-4 w-full max-w-[280px]">
