@@ -1675,8 +1675,7 @@ const goBackToTop = async () => {
                 <p class="text-xs text-slate-600 line-clamp-3 leading-snug">{{ item.comment }}</p>
                 <div class="flex justify-between items-end mt-1">
                   <p v-if="item.player_id" class="text-[10px] text-slate-400 font-medium">👤 {{ getPlayerName(item.player_id) }}</p>
-                  <button v-if="item.player_id && item.player_id !== playerId" @click="openReport(item.player_id, item.id)" class="text-[10px] text-red-400 underline hover:text-red-500 font-bold">🚨 通報</button>
-                </div>
+                  </div>
               </div>
            </div>
         </div>
@@ -1734,8 +1733,7 @@ const goBackToTop = async () => {
                  </div>
                </div>
                <p class="text-sm text-slate-700 bg-white/80 p-3 rounded-xl border-2 border-red-200">{{ gameOverData?.comment }}</p>
-               <button v-if="activePlayer?.id && activePlayer?.id !== playerId" @click="openReport(activePlayer?.id)" class="mt-4 text-sm text-red-500 underline decoration-red-300 hover:text-red-600 font-bold bg-white/80 px-3 py-1 rounded-lg">🚨 この結果を報告する</button>
-            </div>
+               </div>
           </template>
           
           <template v-else>
@@ -1805,11 +1803,7 @@ const goBackToTop = async () => {
                 <div class="w-2.5 h-2.5 bg-cyan-400 rounded-full animate-bounce"></div>
                 <div class="w-2.5 h-2.5 bg-yellow-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
                 <div class="w-2.5 h-2.5 bg-pink-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-              </div>
-              <button v-if="chatData.playerId && chatData.playerId !== playerId" @click="openReport(chatData.playerId, chatData.wordId)" class="mt-1 text-[10px] text-red-400 underline hover:text-red-500 font-bold flex items-center gap-1">
-                <span>🚨</span>報告する
-              </button>
-            </div>
+              </div>            </div>
             <div v-if="chatData.image" class="shrink-0 flex items-center">
               <img :src="chatData.image" class="w-12 h-12 rounded-lg border-2 border-slate-800 object-cover shadow-sm cursor-pointer hover:scale-105 transition-transform" @click="selectedImage = chatData.image" />
             </div>
