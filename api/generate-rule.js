@@ -10,7 +10,7 @@ export default async function handler(req, res) {
     if (!userRequest) return res.status(400).json({ error: 'Missing userRequest' });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.5-flash-lite',
       contents: `ユーザーの要望「${userRequest}」に基づいて、しりとりゲームの特別ルールを作成してください。`,
       config: {
         responseMimeType: "application/json",
