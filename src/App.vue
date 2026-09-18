@@ -1323,9 +1323,12 @@ const resetGame = async () => {
     if (isHost.value) {
       await supabase.from('words').delete().eq('room_id', roomId.value);
       const defaultHp = Number(initialHp.value) || 3;
-      if (myPlayer.value) myPlayer.value.hp = defaultHp;
+      if (myPlayer.value) {
+        myPlayer.value.hp = defaultHp;
+        myPlayer.value.is_ready = false;
+      }
       
-      const hpUpdates = currentPlayers.map(p => supabase.from('players').update({ hp: defaultHp }).eq('id', p.id));
+      const hpUpdates = currentPlayers.map(p => supabase.from('players').update({ hp: defaultHp, is_ready: false }).eq('id', p.id));
       await Promise.all(hpUpdates);
       
       await supabase.from('rooms').update({ status: 'waiting', current_turn_index: 0 }).eq('id', roomId.value);
