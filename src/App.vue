@@ -1440,14 +1440,7 @@ const goBackToTop = async () => {
           </div>
 
 
-          <label v-if="!roomId" class="flex items-center justify-between w-full cursor-pointer bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] mt-2">
-            <span class="text-slate-700 text-sm">画像を共有する📸</span>
-            <div class="relative">
-              <input type="checkbox" v-model="isImageShareEnabled" class="sr-only" />
-              <div class="block w-12 h-7 rounded-full border-2 border-slate-800 transition-colors" :class="isImageShareEnabled ? 'bg-cyan-400' : 'bg-slate-300'"></div>
-              <div class="absolute left-1 top-1 bg-white w-5 h-5 rounded-full border-2 border-slate-800 transition-transform" :class="{'translate-x-5': isImageShareEnabled}"></div>
-            </div>
-          </label>
+
 
           <div class="space-y-2 mt-4">
             <button type="button" class="flex items-center justify-start w-full bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] gap-2 cursor-pointer text-left focus:outline-none" @click="isAgreed = !isAgreed">
