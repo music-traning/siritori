@@ -1216,11 +1216,12 @@ const handleAction = async () => {
       chatData.value = { text: result.comment, image: null }
       capturedImage.value = null
       if (videoRef.value) videoRef.value.play()
+      currentState.value = 'initial'
     } else {
       playFailure()
       chatData.value = { text: result.comment || '不適切な画像のため弾かれました🚨', image: null }
+      currentState.value = 'failure'
     }
-    currentState.value = 'initial'
 
   } catch (err) {
     console.error('Action error:', err)
@@ -1919,14 +1920,11 @@ const goBackToTop = async () => {
 }
 .animate-pulse-once { animation: pulse-once 0.3s ease-out; }
 /* スマホでの横揺れ・横スクロールを完全に防止 */
-html, body {
+body {
   overflow-x: hidden;
   width: 100%;
   position: relative;
   background-color: #fdf2f8;
-}
-#app {
-  overflow-x: hidden;
-  width: 100%;
+  margin: 0;
 }
 </style>
