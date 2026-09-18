@@ -889,8 +889,15 @@ const setupRealtimeSubscription = (id) => {
   }
 
   const roomChannel = supabase.channel(`rooms-${id}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${id}` }, async (payload) => {
-    const room = payload.new
+    const room = payload.new;
     
+    // ★新規追加: 部屋が閉鎖されたらアラートを出して強制的にトップへ戻す
+    if (room.status === 'closed') {
+      alert('ホストが退出したため、部屋が解散されました🏠');
+      window.location.href = '/';
+      return;
+    }
+
     // 部屋全体のステータスを変数に常に同期させる
     roomStatus.value = room.status;
 
@@ -1390,6 +1397,15 @@ const getPlayerName = (pId) => {
 }
 
 const goBackToTop = async () => {
+  // 追加: 自分がホストなら、部屋のステータスを閉鎖状態にする
+  if (isHost.value && roomId.value) {
+    try {
+      await supabase.from('rooms').update({ status: 'closed' }).eq('id', roomId.value);
+    } catch (e) {
+      console.error('Room close error:', e);
+    }
+  }
+
   if (myPlayer.value && myPlayer.value.id) {
     await supabase.from('players').delete().eq('id', myPlayer.value.id);
   }
