@@ -119,16 +119,32 @@ export default async function handler(req) {
     const isNGameOver = result.next_char === 'ん' || result.reading?.endsWith('ん');
 
     if (isNGameOver) {
-      await supabase.from('rooms').update({ status: 'gameover' }).eq('id', roomId);
-      await supabase.from('words').insert([{
-        room_id: roomId,
-        player_id: playerId,
-        detected_word: result.detected_word,
-        reading: result.reading,
-        next_char: result.next_char,
-        comment: result.comment,
-        image_base64: null
-      }]);
+      // 「ん」で終わる自爆
+      const p = players?.find(x => x.id === playerId);
+      if (p) {
+        await supabase.from('players').update({ hp: 0 }).eq('id', playerId);
+        const alivePlayers = players.map(x => x.id === playerId ? { ...x, hp: 0 } : x).filter(x => x.hp > 0);
+        
+        if (alivePlayers.length === 0) {
+          await supabase.from('rooms').update({ status: 'gameover' }).eq('id', roomId);
+          await supabase.from('words').insert([{
+            room_id: roomId, player_id: playerId, detected_word: '全滅', reading: 'ぜんめつ', next_char: 'ん', comment: '「ん」がついて全滅しました💀', image_base64: null
+          }]);
+        } else if (players.length > 1 && alivePlayers.length === 1) {
+          await supabase.from('rooms').update({ status: 'clear' }).eq('id', roomId);
+          const winner = alivePlayers[0];
+          await supabase.from('words').insert([{
+            room_id: roomId, player_id: winner.id, detected_word: '優勝', reading: 'ゆうしょう', next_char: 'ん', comment: `${winner.name} さんの完全勝利です！🎉`, image_base64: null
+          }]);
+        } else {
+          await supabase.from('rooms').update({
+            current_turn_index: getNextTurnIndex(currentTurnIndex)
+          }).eq('id', roomId);
+          await supabase.from('words').insert([{
+            room_id: roomId, player_id: playerId, detected_word: result.detected_word, reading: result.reading, next_char: result.next_char, comment: result.comment, image_base64: null
+          }]);
+        }
+      }
     } else {
       await supabase.from('words').insert([{
         room_id: roomId,

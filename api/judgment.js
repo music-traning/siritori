@@ -121,32 +121,58 @@ export default async function handler(req, res) {
         await supabase.from('players').update({ hp: newHp }).eq('id', playerId);
         
         const alivePlayers = players.map(x => x.id === playerId ? { ...x, hp: newHp } : x).filter(x => x.hp > 0);
+        
+        if (newHp <= 0) {
+          // HPが0になった場合のみ勝敗チェックを行う
+          if (alivePlayers.length === 0) {
+            // 全滅
+            await supabase.from('rooms').update({ status: 'gameover' }).eq('id', roomId);
+            await supabase.from('words').insert([{
+              room_id: roomId, player_id: playerId, detected_word: '全滅', reading: 'ぜんめつ', next_char: 'ん', comment: '生存者が0人になりました...全員脱落です💀', image_base64: null
+            }]);
+          } else if (players.length > 1 && alivePlayers.length === 1) {
+            // 1人だけ生存 (サバイバル勝利)
+            await supabase.from('rooms').update({ status: 'clear' }).eq('id', roomId);
+            const winner = alivePlayers[0];
+            await supabase.from('words').insert([{
+              room_id: roomId, player_id: winner.id, detected_word: '優勝', reading: 'ゆうしょう', next_char: 'ん', comment: `${winner.name} さんの完全勝利です！🎉`, image_base64: null
+            }]);
+          } else {
+            // 他に2人以上生存者がいる場合はターンを次に回す
+            await supabase.from('rooms').update({
+              current_turn_index: getNextTurnIndex(currentTurnIndex)
+            }).eq('id', roomId);
+          }
+        }
+        // HPが1以上の場合は、ターンは進めず何もしない（もう一度同じ人のターン）
+      }
+    } else if (isNGameOver) {
+      // 「ん」で終わる自爆
+      const p = players?.find(x => x.id === playerId);
+      if (p) {
+        await supabase.from('players').update({ hp: 0 }).eq('id', playerId);
+        const alivePlayers = players.map(x => x.id === playerId ? { ...x, hp: 0 } : x).filter(x => x.hp > 0);
+        
         if (alivePlayers.length === 0) {
-          // 全滅
           await supabase.from('rooms').update({ status: 'gameover' }).eq('id', roomId);
           await supabase.from('words').insert([{
-            room_id: roomId, player_id: playerId, detected_word: '全滅', reading: 'ぜんめつ', next_char: 'ん', comment: '生存者が0人になりました...全員脱落です💀', image_base64: null
+            room_id: roomId, player_id: playerId, detected_word: '全滅', reading: 'ぜんめつ', next_char: 'ん', comment: '「ん」がついて全滅しました💀', image_base64: null
           }]);
         } else if (players.length > 1 && alivePlayers.length === 1) {
-          // 1人だけ生存 (サバイバル勝利)
-          await supabase.from('rooms').update({ status: 'gameover' }).eq('id', roomId);
+          await supabase.from('rooms').update({ status: 'clear' }).eq('id', roomId);
           const winner = alivePlayers[0];
           await supabase.from('words').insert([{
             room_id: roomId, player_id: winner.id, detected_word: '優勝', reading: 'ゆうしょう', next_char: 'ん', comment: `${winner.name} さんの完全勝利です！🎉`, image_base64: null
           }]);
         } else {
-          // ゲーム続行: ターンを進める
           await supabase.from('rooms').update({
             current_turn_index: getNextTurnIndex(currentTurnIndex)
           }).eq('id', roomId);
+          await supabase.from('words').insert([{
+            room_id: roomId, player_id: playerId, detected_word: result.detected_word, reading: result.reading, next_char: result.next_char, comment: result.comment, image_base64: uploadedUrl || null
+          }]);
         }
       }
-    } else if (isNGameOver) {
-      // 「ん」で終わる自爆
-      await supabase.from('rooms').update({ status: 'gameover' }).eq('id', roomId);
-      await supabase.from('words').insert([{
-        room_id: roomId, player_id: playerId, detected_word: result.detected_word, reading: result.reading, next_char: result.next_char, comment: result.comment, image_base64: uploadedUrl || null
-      }]);
     } else if (result.is_valid) {
       // 正解: 単語を挿入し、ターンを進める
       await supabase.from('words').insert([{

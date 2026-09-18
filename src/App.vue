@@ -1172,38 +1172,26 @@ const handleAction = async () => {
 const passMyTurn = async () => {
   if (!isMyTurn.value || currentState.value === 'processing' || !myPlayer.value) return
   
-  const expectedTurn = currentTurnIndex.value
-  const expectedHp = myPlayer.value.hp
-  
   currentState.value = 'processing'
   
-  const newHp = Math.max(0, expectedHp - 1)
-  const hpSuccess = await safeUpdatePlayerHp(playerId.value, expectedHp, newHp, roomId.value)
-  if (!hpSuccess) {
-    currentState.value = 'initial'
-    return
-  }
-  
-  const playerInList = playersList.value.find(p => p.id === playerId.value)
-  if (playerInList) playerInList.hp = newHp
-  
-  if (newHp <= 0) {
-    const isOver = await checkWinCondition()
-    if (!isOver) {
-      const turnSuccess = await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
-      if (!turnSuccess) {
-        currentState.value = 'initial'
-        return
-      }
-      currentState.value = 'initial'
-    }
-  } else {
+  try {
+    const response = await fetch('/api/pass-turn', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        roomId: roomId.value,
+        playerId: playerId.value,
+        currentTurnIndex: currentTurnIndex.value
+      })
+    })
+    
+    if (!response.ok) throw new Error('Pass turn API failed')
+    
     chatData.value = { text: `${myPlayer.value.name} がパスしました💨`, image: null }
-    const turnSuccess = await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
-    if (!turnSuccess) {
-      currentState.value = 'initial'
-      return
-    }
+  } catch (error) {
+    console.error('Pass error:', error)
+    chatData.value = { text: 'パスに失敗しました💦', image: null }
+  } finally {
     currentState.value = 'initial'
   }
 }
