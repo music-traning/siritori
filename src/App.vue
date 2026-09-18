@@ -1677,19 +1677,21 @@ const goBackToTop = async () => {
           </label>
 
           <div class="space-y-2 mt-4">
-            <label class="flex items-center justify-start w-full cursor-pointer bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] gap-2">
-              <input type="checkbox" v-model="isAgreed" class="w-5 h-5 rounded border-slate-800 text-cyan-500 focus:ring-cyan-500" />
-              <span class="text-slate-700 text-sm font-bold leading-tight flex-1">
-                <a href="#" @click.prevent="showRulesModal = true" class="text-cyan-600 underline hover:text-cyan-500">利用ルール・安全ガイド</a> に同意する
-              </span>
-            </label>
+            <div class="flex items-center justify-start w-full bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] gap-2">
+              <input type="checkbox" id="agree-rules" v-model="isAgreed" class="w-6 h-6 rounded border-slate-800 text-cyan-500 focus:ring-cyan-500 shrink-0 cursor-pointer" />
+              <div class="text-slate-700 text-sm font-bold leading-tight flex-1">
+                <a href="#" @click.stop.prevent="showRulesModal = true" class="text-cyan-600 underline hover:text-cyan-500">利用ルール・安全ガイド</a>
+                <label for="agree-rules" class="cursor-pointer"> に同意する</label>
+              </div>
+            </div>
 
-            <label class="flex items-center justify-start w-full cursor-pointer bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] gap-2">
-              <input type="checkbox" v-model="isPrivacyAgreed" class="w-5 h-5 rounded border-slate-800 text-cyan-500 focus:ring-cyan-500" />
-              <span class="text-slate-700 text-sm font-bold leading-tight flex-1">
-                <a href="#" @click.prevent="showPrivacyPolicyModal = true" class="text-cyan-600 underline hover:text-cyan-500">プライバシーポリシー</a> を確認した
-              </span>
-            </label>
+            <div class="flex items-center justify-start w-full bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] gap-2">
+              <input type="checkbox" id="agree-privacy" v-model="isPrivacyAgreed" class="w-6 h-6 rounded border-slate-800 text-cyan-500 focus:ring-cyan-500 shrink-0 cursor-pointer" />
+              <div class="text-slate-700 text-sm font-bold leading-tight flex-1">
+                <a href="#" @click.stop.prevent="showPrivacyPolicyModal = true" class="text-cyan-600 underline hover:text-cyan-500">プライバシーポリシー</a>
+                <label for="agree-privacy" class="cursor-pointer"> を確認した</label>
+              </div>
+            </div>
           </div>
 
           <button 
