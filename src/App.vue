@@ -21,7 +21,7 @@ const reportTarget = ref(null)
 const showCameraWarning = ref(false)
 
 // Global State
-const currentMode = ref('join') // 'join', 'lobby', 'play', 'history'
+const currentMode = ref('rule-create') // 'rule-create', 'join', 'lobby', 'play', 'history'
 const roomId = ref(null)
 const roomStatus = ref('waiting')
 const hostId = ref(null)
@@ -31,6 +31,13 @@ const isJoining = ref(false)
 const isAgreed = ref(false)
 const isPrivacyAgreed = ref(false)
 const isPublicRoom = ref(false)
+
+// Rule State
+const userRuleRequest = ref('')
+const isGeneratingRule = ref(false)
+const generatedRule = ref(null)
+const gameRuleId = ref(null)
+const currentRule = ref(null)
 
 const playGameOver = () => {
   if (hasPlayedGameOverSound.value) return
@@ -49,6 +56,7 @@ const roomDifficulty = ref('normal')
 const initialHp = ref(3)
 const maxPlayers = ref(5)
 const roomMaxPlayers = ref(5)
+const isCpuThinking = ref(false)
 
 // Game State
 const targetLetter = ref('あ')
@@ -79,7 +87,7 @@ const canvasRef = ref(null)
 const stream = ref(null)
 const capturedImage = ref(null)
 
-const hiraganaList = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわو".split('')
+const hiraganaList = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわを".split('')
 
 // Computed
 const activePlayer = computed(() => {
@@ -114,14 +122,14 @@ const cleanupSubscriptions = async () => {
 
 const startTurnTimeout = () => {
   clearTimeout(turnTimeout)
-  if (currentMode.value === 'play' && currentState.value === 'initial' && activePlayer.value) {
+  if (currentMode.value === 'play' && currentState.value === 'initial' && activePlayer.value && !activePlayer.value.is_cpu) {
     turnTimeout = setTimeout(async () => {
       if (currentMode.value === 'play' && currentState.value === 'initial' && activePlayer.value) {
         if (isMyTurn.value) {
           alert('60秒経過のため、強制パスします！')
           passMyTurn()
         } else {
-          // ゴースト対策：他の生きているプレイヤーが代理でパス処理を行う
+          // ゴースト対策
           const myPlayerInfo = playersList.value.find(p => p.id === playerId.value)
           if (myPlayerInfo && myPlayerInfo.hp > 0) {
             const expectedHp = activePlayer.value.hp
@@ -159,8 +167,8 @@ const recoverGameState = async (id) => {
   await fetchRoomData(id)
   if (!hostId.value) return false // Room not found
 
-  const myPlayer = playersList.value.find(p => p.id === playerId.value)
-  if (!myPlayer) return false // Not in room
+  const myPlayerInfo = playersList.value.find(p => p.id === playerId.value)
+  if (!myPlayerInfo) return false // Not in room
 
   setupRealtimeSubscription(id)
 
@@ -216,14 +224,14 @@ onMounted(async () => {
         alert('部屋に復帰できませんでした（退出済みか満室です）💦')
         roomId.value = null
         window.history.replaceState({}, '', '/')
-        currentMode.value = 'join'
+        currentMode.value = 'rule-create'
       }
     } else {
       currentMode.value = 'join'
     }
     isRecovering.value = false
   } else {
-    currentMode.value = 'join'
+    currentMode.value = 'rule-create'
   }
   
   window.addEventListener('beforeunload', handleBeforeUnload)
@@ -255,7 +263,7 @@ let reconnectAttempts = 0
 let isCleaningUp = false
 
 const triggerReconnect = (immediate = false) => {
-  if (!roomId.value || currentMode.value === 'join' || currentMode.value === 'history') return
+  if (!roomId.value || currentMode.value === 'join' || currentMode.value === 'rule-create' || currentMode.value === 'history') return
   if (isReconnecting.value && !immediate) return
   if (isCleaningUp) return
 
@@ -276,7 +284,7 @@ const triggerReconnect = (immediate = false) => {
 
       await cleanupSubscriptions()
       setupRealtimeSubscription(roomId.value)
-      await recoverGameState(roomId.value) // This handles fetching and updating UI state
+      await recoverGameState(roomId.value)
       
       reconnectAttempts = 0
     } catch (e) {
@@ -298,7 +306,6 @@ watch(currentMode, (newMode) => {
     }
   }
 })
-
 
 watch([currentMode, currentState], ([newMode, newState]) => {
   if (newMode === 'play' && newState === 'initial') {
@@ -343,7 +350,6 @@ const leaveLobby = async () => {
     heartbeatInterval = null
   }
   if (currentMode.value === 'lobby' && roomStatus.value === 'waiting' && playerId.value) {
-    // 物理削除は外部キー制約エラーになるため、room_idをnullにして退出扱いにする
     await supabase.from('players').update({ room_id: null, is_ready: false }).eq('id', playerId.value)
   }
 }
@@ -354,8 +360,6 @@ const handleBeforeUnload = (e) => {
     heartbeatInterval = null
   }
   if (currentMode.value === 'lobby' && roomStatus.value === 'waiting' && playerId.value) {
-    // navigator.sendBeacon fallback isn't perfectly reliable with Supabase client, 
-    // but we can fire a fire-and-forget update.
     supabase.from('players').update({ room_id: null, is_ready: false }).eq('id', playerId.value).then()
   }
 }
@@ -374,6 +378,53 @@ onUnmounted(async () => {
   }
 })
 
+// --- Rule Generate Logic ---
+const generateRule = async () => {
+  if (!userRuleRequest.value.trim()) return
+  isGeneratingRule.value = true
+  try {
+    const res = await fetch('/api/generate-rule', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userRequest: userRuleRequest.value })
+    })
+    if (!res.ok) throw new Error('API error')
+    generatedRule.value = await res.json()
+  } catch (error) {
+    console.error(error)
+    alert('ルールの生成に失敗しました💦')
+  } finally {
+    isGeneratingRule.value = false
+  }
+}
+
+const confirmRule = async () => {
+  if (!generatedRule.value) return
+  try {
+    const { data, error } = await supabase.from('game_rules').insert([
+      { 
+        title: generatedRule.value.title,
+        theme_condition: generatedRule.value.theme_condition,
+        forbidden_elements: generatedRule.value.forbidden_elements
+      }
+    ]).select().single()
+    if (error) throw error
+    gameRuleId.value = data.id
+    currentMode.value = 'join'
+  } catch (error) {
+    console.error(error)
+    alert('ルールの保存に失敗しました💦')
+  }
+}
+
+const skipRule = () => {
+  gameRuleId.value = null
+  currentRule.value = null
+  generatedRule.value = null
+  currentMode.value = 'join'
+}
+
+
 // --- Join & Lobby Logic ---
 const sanitizeAndValidateName = (name) => {
   const trimmed = name.trim()
@@ -382,7 +433,6 @@ const sanitizeAndValidateName = (name) => {
     return null
   }
   
-  // URLやメアドらしき文字列をブロック
   const urlRegex = /https?:\/\/[^\s]+/i
   const emailRegex = /[^\s@]+@[^\s@]+\.[^\s@]+/i
   if (urlRegex.test(trimmed) || emailRegex.test(trimmed)) {
@@ -390,7 +440,6 @@ const sanitizeAndValidateName = (name) => {
     return null
   }
   
-  // 基本的なXSS対策（HTMLタグをエスケープ）
   const sanitized = trimmed
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -414,10 +463,9 @@ const joinRandomRoom = async () => {
     playerName.value = validName
     localStorage.setItem('shiritori_player_name', playerName.value)
     
-    // 中級、HP3固定
     difficulty.value = 'normal'
     initialHp.value = 3
-    isImageShareEnabled.value = false // パブリックは画像共有オフ推奨
+    isImageShareEnabled.value = false
 
     const randomChar = hiraganaList[Math.floor(Math.random() * hiraganaList.length)]
     
@@ -466,14 +514,12 @@ const joinOrCreateRoom = async () => {
     localStorage.setItem('shiritori_player_name', playerName.value)
     
     if (roomId.value) {
-      // Join existing room
       await fetchRoomData(roomId.value)
       if (!hostId.value) {
         alert('部屋が見つかりません😢')
         return
       }
       
-      // Check if already in room
       let myPlayer = playersList.value.find(p => p.id === playerId.value)
       if (!myPlayer) {
         const { data: joined, error: pError } = await supabase.rpc('join_room', {
@@ -490,7 +536,6 @@ const joinOrCreateRoom = async () => {
         
         localStorage.setItem('shiritori_player_id', playerId.value)
         
-        // ユーザー指示: 再度 SELECT を行い自身のプレイヤー情報を取得しローカルにセット
         const { data: fetchedPlayer, error: fetchErr } = await supabase.from('players').select('*').eq('id', playerId.value).single()
         if (fetchErr) {
           console.error('Player fetch error:', fetchErr)
@@ -498,14 +543,12 @@ const joinOrCreateRoom = async () => {
           playersList.value.push(fetchedPlayer)
         }
         
-        // Refetch to get the updated list and order
         await fetchRoomData(roomId.value)
       }
       setupRealtimeSubscription(roomId.value)
       currentMode.value = roomStatus.value === 'playing' ? 'play' : 'lobby'
       if (currentMode.value === 'play') startCamera()
     } else {
-      // Create new room (Host)
       const randomChar = hiraganaList[Math.floor(Math.random() * hiraganaList.length)]
       const newRoomId = crypto.randomUUID()
       
@@ -518,7 +561,8 @@ const joinOrCreateRoom = async () => {
         host_id: playerId.value,
         difficulty: String(difficulty.value),
         initial_hp: Number(initialHp.value),
-        max_players: Number(maxPlayers.value)
+        max_players: Number(maxPlayers.value),
+        rule_id: gameRuleId.value || null
       }]).select().single()
 
       if (error || !newRoom) {
@@ -581,6 +625,28 @@ const startGame = async () => {
   }
 }
 
+const addCpuPlayer = async () => {
+  if (!isHost.value) return
+  const cpuId = 'cpu-bot-' + crypto.randomUUID().slice(0, 8)
+  const { error: pError } = await supabase.from('players').insert([{
+    id: cpuId,
+    room_id: roomId.value,
+    name: 'AIバディ🤖',
+    hp: Number(initialHp.value),
+    is_ready: true,
+    is_cpu: true,
+    order_index: playersList.value.length
+  }])
+  
+  if (pError) {
+    console.error('CPU add error', pError)
+    alert('CPUの追加に失敗しました💦')
+    return
+  }
+  
+  await supabase.from('rooms').update({ is_cpu_match: true }).eq('id', roomId.value)
+}
+
 const countdownTime = ref(null)
 let countdownInterval = null
 
@@ -588,7 +654,6 @@ const toggleReady = async () => {
   if (!myPlayer.value) return
   initAudio()
   const newReadyState = !myPlayer.value.is_ready
-  // Optimistic UI update
   myPlayer.value.is_ready = newReadyState
   
   const { error } = await supabase
@@ -598,7 +663,6 @@ const toggleReady = async () => {
     
   if (error) {
     console.error('Failed to toggle ready state:', error)
-    // Revert optimistic update on error
     myPlayer.value.is_ready = !newReadyState
   }
 }
@@ -607,20 +671,18 @@ watch(playersList, (newList) => {
   if (currentMode.value !== 'lobby' || roomStatus.value !== 'waiting' || !isPublicRoom.value) return
 
   const validPlayers = newList.filter(p => (p.hp || 0) > 0)
-  const readyPlayers = validPlayers.filter(p => p.is_ready)
+  const readyPlayers = validPlayers.filter(p => p.is_ready && !p.is_cpu)
   const readyCount = readyPlayers.length
-  const totalCount = validPlayers.length
+  const totalHumanCount = validPlayers.filter(p => !p.is_cpu).length
 
-  if (readyCount >= 2 && readyCount === totalCount) {
-    // 全員準備完了 -> 即時スタート
+  if (readyCount >= 2 && readyCount === totalHumanCount) {
     if (countdownInterval) {
       clearInterval(countdownInterval)
       countdownInterval = null
     }
     countdownTime.value = null
     startGame()
-  } else if (readyCount >= 2 && readyCount < totalCount) {
-    // 2人以上準備完了だが未準備がいる -> 15秒カウントダウン
+  } else if (readyCount >= 2 && readyCount < totalHumanCount) {
     if (!countdownInterval) {
       countdownTime.value = 15
       countdownInterval = setInterval(() => {
@@ -635,7 +697,6 @@ watch(playersList, (newList) => {
       }, 1000)
     }
   } else {
-    // 2人未満 -> キャンセル
     if (countdownInterval) {
       clearInterval(countdownInterval)
       countdownInterval = null
@@ -739,6 +800,11 @@ const fetchRoomData = async (id) => {
     initialHp.value = roomData.initial_hp || 3
     roomMaxPlayers.value = roomData.max_players || 5
     chatData.value = { text: `さあ、何撮る？まずは『${targetLetter.value}』から始まるもの見つけてよ😁`, image: null }
+    
+    if (roomData.rule_id) {
+      const { data: ruleData } = await supabase.from('game_rules').select('*').eq('id', roomData.rule_id).single()
+      if (ruleData) currentRule.value = ruleData
+    }
   }
 
   const { data: playersData } = await supabase.from('players').select('*').eq('room_id', id).order('order_index')
@@ -762,11 +828,9 @@ const setupRealtimeSubscription = (id) => {
     }
   }
 
-  // Listen to Rooms (変数 roomChannel に格納)
   const roomChannel = supabase.channel(`rooms-${id}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${id}` }, async (payload) => {
     const room = payload.new
     
-    // Status change
     if (room.status === 'playing') {
       if (currentMode.value === 'lobby') {
         currentMode.value = 'play'
@@ -785,7 +849,6 @@ const setupRealtimeSubscription = (id) => {
       }
     } else if (room.status === 'gameover' && !isProcessingGameOver.value) {
       isProcessingGameOver.value = true
-      // Sync game over state for those who didn't trigger it
       const { data: lastWord } = await supabase.from('words').select('*').eq('room_id', id).order('created_at', { ascending: false }).limit(1).single()
       if (lastWord) {
         gameOverData.value = {
@@ -809,7 +872,6 @@ const setupRealtimeSubscription = (id) => {
     targetLetter.value = room.current_char || targetLetter.value
   }).subscribe(handleStatus)
 
-  // Listen to Players (変数 playerChannel に格納)
   const playerChannel = supabase.channel(`players-${id}`).on('postgres_changes', { event: '*', schema: 'public', table: 'players' }, (payload) => {
     if (payload.eventType === 'INSERT') {
       if (payload.new.room_id === id && !playersList.value.find(p => p.id === payload.new.id)) {
@@ -818,15 +880,12 @@ const setupRealtimeSubscription = (id) => {
       }
     } else if (payload.eventType === 'UPDATE') {
       const idx = playersList.value.findIndex(p => p.id === payload.new.id)
-      
-      // If room_id is explicitly set to something else (e.g., null when leaving)
       if (payload.new.room_id !== undefined && payload.new.room_id !== id) {
         if (idx !== -1) playersList.value.splice(idx, 1)
         return
       }
 
       if (idx !== -1) {
-        // Merge to preserve fields that Postgres optimized out from the payload
         const updatedPlayer = { ...playersList.value[idx], ...payload.new }
         playersList.value.splice(idx, 1, updatedPlayer)
       } else if (payload.new.room_id === id) {
@@ -839,23 +898,17 @@ const setupRealtimeSubscription = (id) => {
     }
   }).subscribe(handleStatus)
 
-  // Listen to Words (変数 wordChannel に格納)
   const wordChannel = supabase.channel(`words-${id}`).on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'words', filter: `room_id=eq.${id}` }, (payload) => {
     const word = payload.new
     if (word.detected_word === latestMyWord.value) {
       latestMyWord.value = '' // clear
     } else {
-      // Ignore system words and words that end the game (handled by room listener)
       if (['全滅', '優勝', '引き分け'].includes(word.detected_word) || word.next_char === 'ん') {
         return
       }
-
-      // Skip if game is already over
       if (isProcessingGameOver.value || currentState.value === 'gameover') {
         return
       }
-
-      // It's someone else's word
       turnCount.value++
       targetLetter.value = word.next_char
       
@@ -888,12 +941,14 @@ const setupRealtimeSubscription = (id) => {
     const onlineIds = Object.keys(presenceState)
 
     playersList.value.forEach(p => {
+      // Ignore CPU players for presence check
+      if (p.is_cpu) return
+      
       if (!onlineIds.includes(p.id)) {
         setTimeout(() => {
           const currentState = presenceChannel.presenceState()
           const currentOnlineIds = Object.keys(currentState)
           if (!currentOnlineIds.includes(p.id)) {
-            // Found a ghost -> set room_id to null and manually remove from UI
             supabase.from('players').update({ room_id: null, is_ready: false }).eq('id', p.id).then()
             playersList.value = playersList.value.filter(player => player.id !== p.id)
           }
@@ -910,7 +965,7 @@ const setupRealtimeSubscription = (id) => {
   activeChannels.push(roomChannel, playerChannel, wordChannel, presenceChannel)
 }
 
-// --- Gameplay Logic ---
+// --- Gameplay Logic & CPU Turn Logic ---
 const getNextTurnIndex = (currentIndex) => {
   const numPlayers = playersList.value.length;
   if (numPlayers === 0) return currentIndex + 1;
@@ -922,7 +977,88 @@ const getNextTurnIndex = (currentIndex) => {
     }
     nextIndex++;
   }
-  return nextIndex; // Fallback
+  return nextIndex;
+}
+
+watch([currentMode, currentState, activePlayer], ([mode, state, player]) => {
+  if (mode === 'play' && state === 'initial' && player?.is_cpu) {
+    triggerCpuTurn(player)
+  }
+})
+
+const triggerCpuTurn = async (cpuPlayer) => {
+  if (!isHost.value) return 
+  if (isCpuThinking.value) return
+  isCpuThinking.value = true
+  
+  chatData.value = { text: 'AIが思考中...🧠', image: null }
+  
+  try {
+    const ruleParams = {
+      theme_condition: currentRule.value?.theme_condition || '特になし',
+      forbidden_elements: currentRule.value?.forbidden_elements || '特になし'
+    }
+    
+    const response = await fetch('/api/cpu-action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        lastChar: targetLetter.value,
+        rule: ruleParams,
+        difficulty: roomDifficulty.value
+      })
+    })
+    
+    if (!response.ok) throw new Error('CPU API failed')
+    const result = await response.json()
+    
+    if (result.next_char === 'ん' || result.reading?.endsWith('ん')) {
+      const statusSuccess = await safeUpdateRoomStatus(roomId.value, 'playing', 'gameover')
+      if (statusSuccess) {
+         const payload = {
+            room_id: roomId.value,
+            player_id: cpuPlayer.id,
+            detected_word: result.detected_word,
+            reading: result.reading,
+            next_char: result.next_char,
+            comment: result.comment,
+            image_base64: null
+         }
+         await supabase.from('words').insert([payload])
+      }
+    } else {
+       const turnSuccess = await safeUpdateRoomTurn(roomId.value, currentTurnIndex.value, getNextTurnIndex(currentTurnIndex.value), result.next_char)
+       if (turnSuccess) {
+         const payload = {
+            room_id: roomId.value,
+            player_id: cpuPlayer.id,
+            detected_word: result.detected_word,
+            reading: result.reading,
+            next_char: result.next_char,
+            comment: result.comment,
+            image_base64: null
+         }
+         await supabase.from('words').insert([payload])
+       }
+    }
+  } catch (error) {
+    console.error('CPU turn error:', error)
+    chatData.value = { text: 'AIがエラーを起こしました🤯 パスします...', image: null }
+    const expectedTurn = currentTurnIndex.value
+    const newHp = Math.max(0, cpuPlayer.hp - 1)
+    await safeUpdatePlayerHp(cpuPlayer.id, cpuPlayer.hp, newHp, roomId.value)
+    
+    if (newHp <= 0) {
+      const isOver = await checkWinCondition()
+      if (!isOver) {
+         await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
+      }
+    } else {
+       await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
+    }
+  } finally {
+    isCpuThinking.value = false
+  }
 }
 
 const checkWinCondition = async () => {
@@ -946,7 +1082,7 @@ const checkWinCondition = async () => {
     
     const payload = {
       room_id: roomId.value,
-      player_id: playerId.value, // Last person who died triggers this
+      player_id: playerId.value,
       detected_word: '全滅',
       reading: 'ぜんめつ',
       next_char: 'ん', 
@@ -1036,7 +1172,6 @@ const uploadImageToStorage = async (base64Str) => {
     const fileName = `${roomId.value}/${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`;
     const { data, error } = await supabase.storage.from('shiritori-images').upload(fileName, blob, { contentType: 'image/jpeg' });
     if (!error) {
-      // 1時間（3600秒）で有効期限が切れるSigned URLを発行
       const { data: signedData, error: signedError } = await supabase.storage.from('shiritori-images').createSignedUrl(fileName, 3600);
       if (!signedError && signedData) {
         return signedData.signedUrl;
@@ -1093,7 +1228,7 @@ const handleAction = async () => {
       player_id: playerId.value,
       detected_word: '引き分け',
       reading: 'ひきわけ',
-      next_char: 'ん', // trigger gameover highlight
+      next_char: 'ん',
       comment: '10ターン耐え抜いた！プレイヤー達の完全勝利（引き分け）！🎉',
       image_base64: uploadedUrl
     }
@@ -1106,12 +1241,18 @@ const handleAction = async () => {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 8500)
     
+    const ruleParams = {
+      theme_condition: currentRule.value?.theme_condition || '特になし',
+      forbidden_elements: currentRule.value?.forbidden_elements || '特になし'
+    }
+
     const response = await fetch('/api/judgment', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         imageBase64: base64Data,
         lastChar: targetLetter.value,
+        rule: ruleParams,
         turnCount: turnCount.value,
         difficulty: roomDifficulty.value
       }),
@@ -1124,10 +1265,9 @@ const handleAction = async () => {
     const result = await response.json()
 
     if (result.is_inappropriate) {
-      // 悪意のあるユーザー対策として、不適切判定の場合もHPを1減らす（画像アップロードは絶対に行わない）
-      const myPlayer = playersList.value.find(p => p.id === playerId.value)
-      if (myPlayer) {
-        const expectedHp = myPlayer.hp
+      const myPlayerInfo = playersList.value.find(p => p.id === playerId.value)
+      if (myPlayerInfo) {
+        const expectedHp = myPlayerInfo.hp
         const newHp = Math.max(0, expectedHp - 1)
         const hpSuccess = await safeUpdatePlayerHp(playerId.value, expectedHp, newHp, roomId.value)
         if (!hpSuccess) {
@@ -1137,7 +1277,7 @@ const handleAction = async () => {
         
         playFailure()
         chatData.value = { text: result.comment || '不適切な画像のため弾かれました🚨', image: null }
-        myPlayer.hp = newHp
+        myPlayerInfo.hp = newHp
         
         if (newHp <= 0) {
           const isOver = await checkWinCondition()
@@ -1224,9 +1364,9 @@ const handleAction = async () => {
       if (videoRef.value) videoRef.value.play()
       currentState.value = 'initial'
     } else {
-      const myPlayer = playersList.value.find(p => p.id === playerId.value)
-      if (myPlayer) {
-        const expectedHp = myPlayer.hp
+      const myPlayerInfo = playersList.value.find(p => p.id === playerId.value)
+      if (myPlayerInfo) {
+        const expectedHp = myPlayerInfo.hp
         const newHp = Math.max(0, expectedHp - 1)
         const hpSuccess = await safeUpdatePlayerHp(playerId.value, expectedHp, newHp, roomId.value)
         if (!hpSuccess) {
@@ -1236,7 +1376,7 @@ const handleAction = async () => {
         
         playFailure()
         chatData.value = { text: result.comment, image: null }
-        myPlayer.hp = newHp
+        myPlayerInfo.hp = newHp
         
         if (newHp <= 0) {
           const isOver = await checkWinCondition()
@@ -1278,7 +1418,6 @@ const handleAction = async () => {
 const passMyTurn = async () => {
   if (!isMyTurn.value || currentState.value === 'processing' || !myPlayer.value) return
   
-  // 実行直前の再確認 (要件3)
   const expectedTurn = currentTurnIndex.value
   const expectedHp = myPlayer.value.hp
   
@@ -1291,7 +1430,6 @@ const passMyTurn = async () => {
     return
   }
   
-  // Update local state BEFORE checking win condition
   const playerInList = playersList.value.find(p => p.id === playerId.value)
   if (playerInList) playerInList.hp = newHp
   
@@ -1322,14 +1460,12 @@ const surrender = async () => {
     const expectedHp = myPlayer.value.hp
     const hpSuccess = await safeUpdatePlayerHp(playerId.value, expectedHp, 0, roomId.value)
     if (!hpSuccess) {
-      // 既に状態が変わっていても強制的に退出処理は進める
+      // ignore
     }
     
-    // Update local state BEFORE checking win condition
     const playerInList = playersList.value.find(p => p.id === playerId.value)
     if (playerInList) playerInList.hp = 0
     
-    // Check if the game should end (last man standing / wipeout)
     const isOver = await checkWinCondition()
     if (!isOver && isMyTurn.value) {
       const expectedTurn = currentTurnIndex.value
@@ -1432,8 +1568,54 @@ const goBackToTop = async () => {
       </div>
     </div>
 
+    <!-- RULE CREATE SCREEN -->
+    <template v-if="currentMode === 'rule-create'">
+      <div class="z-10 flex flex-col items-center justify-center flex-1 w-full gap-6 my-auto py-4">
+        <h1 class="text-3xl text-slate-800 drop-shadow-sm font-black tracking-wide text-center leading-tight">
+          どんなルールの<br>ゲームにする？🤔
+        </h1>
+        
+        <div class="w-full max-w-sm flex flex-col gap-4">
+          <textarea 
+            v-model="userRuleRequest" 
+            placeholder="例: サイバーパンク風の世界にあるもの限定！とか、赤いものだけ！など" 
+            class="w-full p-4 rounded-2xl border-4 border-slate-800 shadow-[0_4px_0_0_#1e293b] text-lg focus:outline-none focus:border-cyan-500 h-32 resize-none"
+          ></textarea>
+          
+          <button 
+            @click="generateRule"
+            :disabled="!userRuleRequest.trim() || isGeneratingRule"
+            class="w-full py-4 rounded-2xl text-xl text-white bg-cyan-500 hover:bg-cyan-400 shadow-[0_6px_0_0_#0891b2] transition-all disabled:opacity-50 active:translate-y-[6px] active:shadow-none"
+          >
+            {{ isGeneratingRule ? 'AIが考え中...💭' : 'AIにルールを作ってもらう✨' }}
+          </button>
+          
+          <div v-if="generatedRule" class="bg-white p-4 rounded-2xl border-4 border-pink-400 shadow-md">
+            <h3 class="text-xl font-black text-pink-500 mb-2">{{ generatedRule.title }}</h3>
+            <div class="text-sm text-slate-700 space-y-2 font-bold">
+              <p><span class="text-slate-500">✅ 条件:</span> {{ generatedRule.theme_condition }}</p>
+              <p><span class="text-slate-500">❌ NG:</span> {{ generatedRule.forbidden_elements }}</p>
+            </div>
+            <button 
+              @click="confirmRule"
+              class="w-full py-3 mt-4 rounded-xl text-lg text-white bg-pink-500 hover:bg-pink-400 shadow-[0_4px_0_0_#be185d] transition-all active:translate-y-[4px] active:shadow-none"
+            >
+              このルールで部屋を作る🎮
+            </button>
+          </div>
+          
+          <button 
+            @click="skipRule"
+            class="w-full py-3 mt-2 rounded-2xl text-lg text-slate-500 bg-transparent hover:bg-slate-100 transition-all font-bold underline"
+          >
+            ルールなしで普通に遊ぶ
+          </button>
+        </div>
+      </div>
+    </template>
+
     <!-- JOIN SCREEN -->
-    <template v-if="currentMode === 'join'">
+    <template v-else-if="currentMode === 'join'">
       <button @click="showHowToPlayModal = true" class="absolute top-4 right-4 z-50 bg-white border-2 border-slate-800 rounded-full px-4 py-1.5 text-sm font-bold shadow-[0_4px_0_0_#1e293b] active:shadow-none active:translate-y-[4px] text-slate-700 transition-all flex items-center gap-1"><span>📖</span>遊び方</button>
       <div class="z-10 flex flex-col items-center justify-center flex-1 w-full gap-8 my-auto py-4">
         <h1 class="text-4xl text-slate-800 drop-shadow-sm tracking-wide text-center leading-tight">
@@ -1538,15 +1720,23 @@ const goBackToTop = async () => {
     <template v-else-if="currentMode === 'lobby'">
       <div class="z-10 flex flex-col items-center justify-center flex-1 w-full gap-4 max-w-sm my-auto py-4">
         <h2 class="text-2xl text-slate-800 font-black mb-2">待機ロビー 🛋️</h2>
+        
+        <div v-if="currentRule" class="w-full bg-pink-100 rounded-2xl border-4 border-pink-400 shadow-sm p-3 mb-2 text-center">
+          <p class="text-xs font-black text-pink-500 mb-1">現在の特別ルール</p>
+          <p class="text-lg font-bold text-slate-800">{{ currentRule.title }}</p>
+        </div>
+
         <div class="w-full bg-white rounded-2xl border-4 border-slate-800 shadow-[0_6px_0_0_#1e293b] p-4 flex flex-col gap-3">
           <h3 class="text-slate-500 text-sm text-center border-b-2 border-dashed border-slate-200 pb-2">現在の参加者 ({{ playersList.length }}/{{ roomMaxPlayers }})</h3>
           <ul class="space-y-2">
             <li v-for="(p, idx) in playersList" :key="p.id" class="flex items-center gap-2 p-2 rounded-xl bg-slate-50 border-2 border-slate-200" :class="{'opacity-50 grayscale': p.hp <= 0}">
               <span class="w-6 h-6 rounded-full bg-cyan-400 text-white flex items-center justify-center text-xs shrink-0">{{ idx + 1 }}</span>
-              <span class="text-slate-800 truncate flex-1" :class="{'line-through': p.hp <= 0}">{{ p.name }}</span>
+              <span class="text-slate-800 truncate flex-1" :class="{'line-through': p.hp <= 0}">
+                {{ p.name }} <span v-if="p.is_cpu" class="text-xs">🤖</span>
+              </span>
               <span class="text-xs tracking-widest text-pink-500 shrink-0">{{ '❤️'.repeat(p.hp || 0) }}{{ '🖤'.repeat(Math.max(0, initialHp - (p.hp || 0))) }}</span>
               <span v-if="!isPublicRoom && p.id === hostId" class="text-[10px] bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full shrink-0">ホスト</span>
-              <span v-if="isPublicRoom && p.is_ready" class="text-[10px] bg-green-400 text-white px-2 py-0.5 rounded-full shrink-0 font-bold">✅ 準備OK</span>
+              <span v-if="isPublicRoom && p.is_ready && !p.is_cpu" class="text-[10px] bg-green-400 text-white px-2 py-0.5 rounded-full shrink-0 font-bold">✅ 準備OK</span>
             </li>
             <li v-if="playersList.length === 0" class="text-center text-slate-400 text-sm py-4">読み込み中...</li>
           </ul>
@@ -1558,6 +1748,14 @@ const goBackToTop = async () => {
         <p v-else-if="!isHost" class="text-slate-500 text-sm animate-pulse mt-4">ホストが開始するのを待っています...</p>
         
         <div class="w-full flex flex-col gap-2 mt-4">
+          <button 
+            v-if="!isPublicRoom && isHost"
+            @click="addCpuPlayer"
+            class="w-full py-3 mb-2 rounded-2xl text-lg text-slate-800 bg-yellow-400 border-4 border-slate-800 shadow-[0_4px_0_0_#1e293b] hover:bg-yellow-300 transition-all active:translate-y-[4px] active:shadow-none"
+          >
+            CPUと1人で遊ぶ🤖
+          </button>
+
           <button 
             v-if="!isPublicRoom"
             @click="shareRoomLink"
@@ -1640,7 +1838,6 @@ const goBackToTop = async () => {
     <!-- PLAY SCREEN -->
     <template v-else>
       <header v-if="currentState !== 'gameover' && currentState !== 'clear'" class="w-full text-center shrink-0 my-1 z-10 flex flex-col items-center relative">
-        <!-- Turn indicator -->
         <div class="mb-2 flex flex-wrap items-center justify-center gap-2">
           <div class="px-4 py-1 rounded-full border-2 border-slate-800 bg-white shadow-sm font-black text-sm" :class="isMyTurn ? 'text-pink-500 border-pink-500' : 'text-slate-600'">
             今は {{ activePlayer?.name }} のターン！
@@ -1658,6 +1855,9 @@ const goBackToTop = async () => {
         <h1 class="text-xl text-slate-800 drop-shadow-sm tracking-wide">
           次は、【<span class="text-3xl text-cyan-500 drop-shadow-md">{{ targetLetter }}</span> 】から！📸
         </h1>
+        <p v-if="currentRule" class="text-xs font-black text-pink-500 bg-pink-100 px-3 py-1 mt-1 rounded-full border border-pink-300">
+          ルール: {{ currentRule.title }}
+        </p>
       </header>
 
       <main class="w-full flex-grow min-h-0 relative z-10 mb-2 flex flex-col">
@@ -1687,7 +1887,6 @@ const goBackToTop = async () => {
           </template>
           
           <template v-else>
-            <!-- Spectator overlay -->
             <div v-if="(playersList.find(p => p.id === playerId)?.hp || 0) <= 0" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center z-[15] p-4 text-center backdrop-blur-sm">
               <div class="text-6xl mb-4">💀</div>
               <p class="text-white text-2xl font-black mb-2 text-red-400">あなたは脱落しました...</p>
@@ -1732,7 +1931,6 @@ const goBackToTop = async () => {
               </div>
             </div>
 
-            <!-- Word Animation Overlay -->
             <div v-if="wordAnimationData" class="absolute inset-0 flex flex-col items-center justify-center z-[60] pointer-events-none px-4 drop-shadow-2xl">
               <div class="bg-white/95 px-8 py-6 rounded-3xl border-4 border-cyan-400 transform -rotate-3 text-center shadow-[0_10px_25px_-5px_rgba(0,0,0,0.5)] animate-fade-in-up">
                 <p class="text-sm font-black text-slate-500 tracking-widest mb-1">{{ wordAnimationData.reading }}</p>
@@ -1745,7 +1943,6 @@ const goBackToTop = async () => {
         </div>
       </main>
 
-      <!-- Chat Bubble -->
       <div v-if="currentState !== 'gameover'" class="w-full shrink-0 mb-3 z-10">
         <div class="flex items-end gap-2">
           <div class="w-10 h-10 rounded-full bg-cyan-100 border-2 border-cyan-400 flex items-center justify-center text-xl shadow-sm shrink-0">🤖</div>
@@ -1768,7 +1965,6 @@ const goBackToTop = async () => {
         </div>
       </div>
 
-      <!-- Action Buttons -->
       <div class="w-full shrink-0 mb-2 z-10 flex flex-col gap-2">
         <template v-if="currentState === 'gameover'">
           <button @click="viewHistory" class="w-full py-3 rounded-2xl text-lg bg-white text-slate-800 border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] hover:bg-slate-50 transition-all active:translate-y-[4px] active:shadow-none">
@@ -1820,7 +2016,6 @@ const goBackToTop = async () => {
       </div>
     </template>
     
-    <!-- MODALS -->
     <RulesModal :isOpen="showRulesModal" @close="showRulesModal = false" />
     <HowToPlayModal :isOpen="showHowToPlayModal" @close="showHowToPlayModal = false" />
     <PrivacyPolicyModal :isOpen="showPrivacyPolicyModal" @close="showPrivacyPolicyModal = false" />
