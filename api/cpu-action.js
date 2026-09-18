@@ -29,7 +29,7 @@ export default async function handler(req) {
     // 部屋の存在とステータス検証 (野良APIリクエスト防止)
     const { data: room, error: roomError } = await supabase
       .from('rooms')
-      .select('status')
+      .select('status, current_turn_index')
       .eq('id', roomId)
       .single();
 
@@ -38,6 +38,24 @@ export default async function handler(req) {
     }
     if (room.status !== 'playing' && room.status !== 'waiting') {
       return new Response(JSON.stringify({ error: 'Forbidden: Invalid room status' }), { status: 403 });
+    }
+
+    // ターン偽装の防止 (現在アクティブなプレイヤーIDとリクエスト元のIDが一致するか検証)
+    const { data: turnPlayers } = await supabase
+      .from('players')
+      .select('id')
+      .eq('room_id', roomId)
+      .order('order_index', { ascending: true });
+
+    if (!turnPlayers || turnPlayers.length === 0) {
+      return new Response(JSON.stringify({ error: 'Forbidden: No players found in room' }), { status: 403 });
+    }
+
+    const currentTurnIndexDB = room.current_turn_index || 0;
+    const activePlayerId = turnPlayers[currentTurnIndexDB % turnPlayers.length]?.id;
+
+    if (activePlayerId !== playerId) {
+      return new Response(JSON.stringify({ error: 'Forbidden: Not your turn (Turn Spoofing detected)' }), { status: 403 });
     }
 
     let prompt = `あなたはプレイヤーと一緒にしりとりで遊んでいるフレンドリーなAIバディです。

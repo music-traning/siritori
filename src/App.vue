@@ -15,11 +15,26 @@ const isAdminMode = computed(() => {
 
 const isAdminAuthenticated = ref(false)
 const adminPasswordInput = ref('')
-const checkAdminPassword = () => {
-  if (adminPasswordInput.value === import.meta.env.VITE_ADMIN_PASSWORD) {
-    isAdminAuthenticated.value = true
-  } else {
+const checkAdminPassword = async () => {
+  try {
+    const response = await fetch('/api/verify-admin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: adminPasswordInput.value })
+    })
+    
+    if (response.ok) {
+      const data = await response.json()
+      if (data.success) {
+        isAdminAuthenticated.value = true
+        return
+      }
+    }
+    
     alert('パスワードが間違っています')
+  } catch (error) {
+    console.error('Auth error:', error)
+    alert('認証エラーが発生しました')
   }
 }
 

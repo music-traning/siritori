@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     // 部屋の存在とステータス検証 (野良APIリクエスト防止)
     const { data: room, error: roomError } = await supabase
       .from('rooms')
-      .select('status')
+      .select('status, current_turn_index')
       .eq('id', roomId)
       .single();
 
@@ -24,6 +24,24 @@ export default async function handler(req, res) {
     }
     if (room.status !== 'playing' && room.status !== 'waiting') {
       return res.status(403).json({ error: 'Forbidden: Invalid room status' });
+    }
+
+    // ターン偽装の防止 (現在アクティブなプレイヤーIDとリクエスト元のIDが一致するか検証)
+    const { data: turnPlayers } = await supabase
+      .from('players')
+      .select('id')
+      .eq('room_id', roomId)
+      .order('order_index', { ascending: true });
+
+    if (!turnPlayers || turnPlayers.length === 0) {
+      return res.status(403).json({ error: 'Forbidden: No players found in room' });
+    }
+
+    const currentTurnIndexDB = room.current_turn_index || 0;
+    const activePlayerId = turnPlayers[currentTurnIndexDB % turnPlayers.length]?.id;
+
+    if (activePlayerId !== playerId) {
+      return res.status(403).json({ error: 'Forbidden: Not your turn (Turn Spoofing detected)' });
     }
 
     let systemPrompt = `あなたは画像に写っているものを判定するAI審査員です。
