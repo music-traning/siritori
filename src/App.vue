@@ -1263,30 +1263,50 @@ const surrender = async () => {
 }
 
 const resetGame = async () => {
+  // 1. 人数のチェック
   if (playersList.value.length <= 1) {
     alert('他のプレイヤーが退出したため、部屋を解散してトップへ戻ります🏠');
-    await goBackToTop();
+    if (typeof goBackToTop === 'function') await goBackToTop();
     return;
   }
   
+  // 2. 再戦フロー（ロビーへ戻る）
   if (isHost.value) {
     try {
+      isJudging.value = true;
+      
+      // 履歴の削除
       await supabase.from('words').delete().eq('room_id', roomId.value);
       
+      // 部屋の設定から初期HPを安全に取得（取得できない場合は3）
+      const defaultHp = roomData.value?.initial_hp || 3;
+      
+      // ローカルのHPを即座に回復（ドクロ画面の誤表示を完全に防ぐ）
+      if (myPlayer.value) {
+        myPlayer.value.hp = defaultHp;
+      }
+
+      // DBの全プレイヤーのHPリセット
       const hpUpdates = playersList.value.map(p => 
-        supabase.from('players').update({ hp: Number(initialHp.value) || 3 }).eq('id', p.id)
+        supabase.from('players').update({ hp: defaultHp }).eq('id', p.id)
       );
       await Promise.all(hpUpdates);
       
+      // 部屋の状態をロビーに戻し、ターンをリセット
       await supabase.from('rooms').update({ 
         status: 'waiting',
         current_turn_index: 0
       }).eq('id', roomId.value);
       
+      // フロントエンドのUI切り替えを確実に行う
       currentMode.value = 'lobby';
       currentState.value = 'waiting';
+      
     } catch (error) {
       console.error('Play Again Error:', error);
+      alert('リセット処理中にエラーが発生しました');
+    } finally {
+      isJudging.value = false;
     }
   }
 }
@@ -1341,6 +1361,9 @@ const getPlayerName = (pId) => {
 }
 
 const goBackToTop = async () => {
+  if (myPlayer.value && myPlayer.value.id) {
+    await supabase.from('players').delete().eq('id', myPlayer.value.id);
+  }
   await leaveLobby()
   window.location.href = '/'
 }
