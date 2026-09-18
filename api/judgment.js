@@ -1,13 +1,30 @@
 import { GoogleGenAI, Type } from '@google/genai';
+import { createClient } from '@supabase/supabase-js';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
   try {
-    const { imageBase64, lastChar, rule, turnCount, difficulty } = req.body;
+    const { imageBase64, lastChar, rule, turnCount, difficulty, roomId } = req.body;
     if (!imageBase64 || !lastChar) return res.status(400).json({ error: 'Missing imageBase64 or lastChar' });
+    if (!roomId) return res.status(403).json({ error: 'Forbidden: Missing roomId' });
+
+    // 部屋の存在とステータス検証 (野良APIリクエスト防止)
+    const { data: room, error: roomError } = await supabase
+      .from('rooms')
+      .select('status')
+      .eq('id', roomId)
+      .single();
+
+    if (roomError || !room) {
+      return res.status(403).json({ error: 'Forbidden: Room not found' });
+    }
+    if (room.status !== 'playing' && room.status !== 'waiting') {
+      return res.status(403).json({ error: 'Forbidden: Invalid room status' });
+    }
 
     let systemPrompt = `あなたは画像に写っているものを判定するAI審査員です。
 【厳格な内部ロジック】
@@ -21,6 +38,15 @@ export default async function handler(req, res) {
     }
     if (rule && rule.forbidden_elements) {
       systemPrompt += `4. NG条件(存在してはいけない): ${rule.forbidden_elements}\n`;
+    }
+
+    systemPrompt += `\n【難易度に応じた判定方針】\n`;
+    if (difficulty === 'easy') {
+      systemPrompt += `判定基準を寛容にし、少しでも条件に掠っていれば正解とする。子供と遊ぶように優しく。\n`;
+    } else if (difficulty === 'hard') {
+      systemPrompt += `条件を極めて厳密に解釈し、少しでも疑わしい場合は容赦無く不正解とする。審査員のように厳しく。\n`;
+    } else {
+      systemPrompt += `一般的なしりとりの基準で判定すること。\n`;
     }
 
     systemPrompt += `

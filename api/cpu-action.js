@@ -1,13 +1,30 @@
 import { GoogleGenAI, Type } from '@google/genai';
+import { createClient } from '@supabase/supabase-js';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
   try {
-    const { lastChar, rule, difficulty, usedWords } = req.body;
+    const { lastChar, rule, difficulty, usedWords, roomId } = req.body;
     if (!lastChar) return res.status(400).json({ error: 'Missing lastChar' });
+    if (!roomId) return res.status(403).json({ error: 'Forbidden: Missing roomId' });
+
+    // 部屋の存在とステータス検証 (野良APIリクエスト防止)
+    const { data: room, error: roomError } = await supabase
+      .from('rooms')
+      .select('status')
+      .eq('id', roomId)
+      .single();
+
+    if (roomError || !room) {
+      return res.status(403).json({ error: 'Forbidden: Room not found' });
+    }
+    if (room.status !== 'playing' && room.status !== 'waiting') {
+      return res.status(403).json({ error: 'Forbidden: Invalid room status' });
+    }
 
     let prompt = `あなたはプレイヤーと一緒にしりとりで遊んでいるフレンドリーなAIバディです。
 以下の【厳格なルール】に従って、単語を1つ生成してください。
@@ -25,6 +42,15 @@ export default async function handler(req, res) {
       prompt += `4. 以下の単語はすでに使用済みのため、絶対に回答してはならない: ${usedWords.join(', ')}\n`;
     }
     
+    prompt += `\n【難易度に応じた単語選び】\n`;
+    if (difficulty === 'easy') {
+      prompt += `子供でも知っている簡単な単語を選ぶこと。\n`;
+    } else if (difficulty === 'hard') {
+      prompt += `大人でも思いつきにくい、少しマニアックで長い単語を選ぶこと。AIの語彙力を見せつけること。\n`;
+    } else {
+      prompt += `一般的なしりとりで使われる普通の単語を選ぶこと。\n`;
+    }
+
     prompt += `
 【ユーザーへのコメント(comment)のガイドライン】
 思考プロセスや言い訳をコメントに出力してごまかすことは固く禁じます。単語の選定ロジックは厳格に行いますが、出力する comment は、一緒に遊んでいる親しみやすいAIバディとしてのセリフにしてください。

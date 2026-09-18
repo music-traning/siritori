@@ -1004,7 +1004,8 @@ const triggerCpuTurn = async (cpuPlayer) => {
         lastChar: targetLetter.value,
         rule: ruleParams,
         difficulty: roomDifficulty.value,
-        usedWords: usedWords
+        usedWords: usedWords,
+        roomId: roomId.value
       })
     })
     
@@ -1253,7 +1254,8 @@ const handleAction = async () => {
         lastChar: targetLetter.value,
         rule: ruleParams,
         turnCount: turnCount.value,
-        difficulty: roomDifficulty.value
+        difficulty: roomDifficulty.value,
+        roomId: roomId.value
       }),
       signal: controller.signal
     })
