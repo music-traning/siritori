@@ -8,9 +8,12 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
   try {
-    const { imageBase64, lastChar, rule, turnCount, difficulty, roomId, playerId, currentTurnIndex } = req.body;
-    if (!imageBase64 || !lastChar) return res.status(400).json({ error: 'Missing imageBase64 or lastChar' });
+    const { imageBase64, lastChar, rule, turnCount, difficulty, roomId, playerId, currentTurnIndex, isPass } = req.body;
+    
     if (!roomId || !playerId) return res.status(403).json({ error: 'Forbidden: Missing roomId or playerId' });
+    if (!isPass && (!imageBase64 || !lastChar)) {
+      return res.status(400).json({ error: 'Missing imageBase64 or lastChar' });
+    }
 
     // 部屋の存在とステータス、およびターン検証
     const { data: room, error: roomError } = await supabase
@@ -35,6 +38,50 @@ export default async function handler(req, res) {
     const activePlayer = players[room.current_turn_index % players.length];
     if (activePlayer.id !== playerId) {
       return res.status(403).json({ error: 'Forbidden: Not your turn' });
+    }
+
+    const getNextTurnIndex = (currentIndex) => {
+      const numPlayers = players.length;
+      let nextIndex = currentIndex + 1;
+      for(let i=0; i<numPlayers; i++) {
+        const p = players[nextIndex % numPlayers];
+        if (p && p.hp > 0) return nextIndex;
+        nextIndex++;
+      }
+      return nextIndex;
+    };
+
+    if (isPass) {
+      const p = players?.find(x => x.id === playerId);
+      if (p) {
+        const newHp = Math.max(0, p.hp - 1);
+        await supabase.from('players').update({ hp: newHp }).eq('id', playerId);
+        
+        const alivePlayers = players.map(x => x.id === playerId ? { ...x, hp: newHp } : x).filter(x => x.hp > 0);
+        const wordsToInsert = [{
+          room_id: roomId, player_id: playerId,
+          detected_word: 'パス', reading: 'ぱす', next_char: lastChar || 'あ',
+          comment: `${p.name} がパスしました💨`, image_base64: null
+        }];
+
+        if (newHp <= 0) {
+          if (alivePlayers.length === 0) {
+            wordsToInsert.push({ room_id: roomId, player_id: playerId, detected_word: '全滅', reading: 'ぜんめつ', next_char: 'ん', comment: '全員脱落しました💀', image_base64: null });
+            await supabase.from('rooms').update({ status: 'gameover' }).eq('id', roomId);
+          } else if (players.length > 1 && alivePlayers.length === 1) {
+            const winner = alivePlayers[0];
+            wordsToInsert.push({ room_id: roomId, player_id: winner.id, detected_word: '優勝', reading: 'ゆうしょう', next_char: 'ん', comment: `${winner.name} さんの完全勝利です！🎉`, image_base64: null });
+            await supabase.from('rooms').update({ status: 'clear' }).eq('id', roomId);
+          } else {
+            await supabase.from('rooms').update({ current_turn_index: getNextTurnIndex(currentTurnIndex) }).eq('id', roomId);
+          }
+        } else {
+          await supabase.from('rooms').update({ current_turn_index: getNextTurnIndex(currentTurnIndex) }).eq('id', roomId);
+        }
+        
+        await supabase.from('words').insert(wordsToInsert);
+        return res.status(200).json({ success: true, isPass: true });
+      }
     }
 
     let systemPrompt = `あなたは画像に写っているものを判定するAI審査員です。
