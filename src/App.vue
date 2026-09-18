@@ -627,7 +627,7 @@ const startGame = async () => {
 
 const addCpuPlayer = async () => {
   if (!isHost.value) return
-  const cpuId = 'cpu-bot-' + crypto.randomUUID().slice(0, 8)
+  const cpuId = crypto.randomUUID()
   const { error: pError } = await supabase.from('players').insert([{
     id: cpuId,
     room_id: roomId.value,
