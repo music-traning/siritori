@@ -440,14 +440,7 @@ const sanitizeAndValidateName = (name) => {
     return null
   }
   
-  const sanitized = trimmed
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;')
-    
-  return sanitized
+  return trimmed
 }
 const joinRandomRoom = async () => {
   if (isJoining.value) return

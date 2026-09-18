@@ -50,7 +50,16 @@ export default async function handler(req, res) {
       }
     });
 
-    const result = JSON.parse(response.text);
+    let result = JSON.parse(response.text);
+    
+    // 強制検算ロジック: AIのハルシネーション対策
+    if (result.reading && result.reading.charAt(0) !== lastChar) {
+      result.detected_word = 'システムエラーん';
+      result.reading = 'しすてむえらーん';
+      result.next_char = 'ん';
+      result.comment = `う〜ん、『${lastChar}』から始まる言葉がどうしても思いつかないや…降参するね🤖💦`;
+    }
+
     return res.status(200).json(result);
   } catch (error) {
     console.error(error);

@@ -60,6 +60,13 @@ export default async function handler(req, res) {
     });
 
     const result = JSON.parse(response.text);
+    
+    // 強制検算ロジック: AIのハルシネーション対策
+    if (result.reading && result.reading.charAt(0) !== lastChar) {
+      result.is_valid = false;
+      result.comment = `あれれ？『${lastChar}』から始まっていないみたい💦 もう一度探してみてね！`;
+    }
+
     return res.status(200).json(result);
   } catch (error) {
     console.error(error);
