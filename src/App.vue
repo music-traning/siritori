@@ -1553,7 +1553,7 @@ const goBackToTop = async () => {
   </div>
   <div v-if="!isAdminMode"
     class="w-full bg-pink-50 flex flex-col items-center p-3 font-bold max-w-md mx-auto relative"
-    :class="currentMode === 'play' ? 'h-[100dvh] overflow-hidden' : 'min-h-[100dvh] overflow-x-hidden overflow-y-auto pt-8 pb-4'"
+    :class="currentMode === 'play' ? 'h-[100dvh] overflow-hidden' : 'min-h-screen pt-8 pb-12'"
   >
     <!-- Decorative background elements -->
     <div class="absolute top-[-50px] left-[-50px] w-32 h-32 bg-yellow-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob pointer-events-none z-0"></div>
@@ -1677,19 +1677,21 @@ const goBackToTop = async () => {
           </label>
 
           <div class="space-y-2 mt-4">
-            <div class="flex items-center justify-start w-full bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] gap-2">
-              <input type="checkbox" id="agree-rules" v-model="isAgreed" class="w-6 h-6 rounded border-slate-800 text-cyan-500 focus:ring-cyan-500 shrink-0 cursor-pointer" />
+            <div class="flex items-center justify-start w-full bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] gap-2 cursor-pointer" @click="isAgreed = !isAgreed">
+              <div class="w-6 h-6 rounded border-2 border-slate-800 flex items-center justify-center shrink-0 transition-colors" :class="isAgreed ? 'bg-cyan-500 border-cyan-500' : 'bg-white'">
+                <span v-if="isAgreed" class="text-white text-sm font-black">✓</span>
+              </div>
               <div class="text-slate-700 text-sm font-bold leading-tight flex-1">
-                <a href="#" @click.stop.prevent="showRulesModal = true" class="text-cyan-600 underline hover:text-cyan-500">利用ルール・安全ガイド</a>
-                <label for="agree-rules" class="cursor-pointer"> に同意する</label>
+                <a href="#" @click.stop.prevent="showRulesModal = true" class="text-cyan-600 underline hover:text-cyan-500">利用ルール・安全ガイド</a> に同意する
               </div>
             </div>
 
-            <div class="flex items-center justify-start w-full bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] gap-2">
-              <input type="checkbox" id="agree-privacy" v-model="isPrivacyAgreed" class="w-6 h-6 rounded border-slate-800 text-cyan-500 focus:ring-cyan-500 shrink-0 cursor-pointer" />
+            <div class="flex items-center justify-start w-full bg-white p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] gap-2 cursor-pointer" @click="isPrivacyAgreed = !isPrivacyAgreed">
+              <div class="w-6 h-6 rounded border-2 border-slate-800 flex items-center justify-center shrink-0 transition-colors" :class="isPrivacyAgreed ? 'bg-cyan-500 border-cyan-500' : 'bg-white'">
+                <span v-if="isPrivacyAgreed" class="text-white text-sm font-black">✓</span>
+              </div>
               <div class="text-slate-700 text-sm font-bold leading-tight flex-1">
-                <a href="#" @click.stop.prevent="showPrivacyPolicyModal = true" class="text-cyan-600 underline hover:text-cyan-500">プライバシーポリシー</a>
-                <label for="agree-privacy" class="cursor-pointer"> を確認した</label>
+                <a href="#" @click.stop.prevent="showPrivacyPolicyModal = true" class="text-cyan-600 underline hover:text-cyan-500">プライバシーポリシー</a> を確認した
               </div>
             </div>
           </div>
