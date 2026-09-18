@@ -628,10 +628,12 @@ const startGame = async () => {
 const addCpuPlayer = async () => {
   if (!isHost.value) return
   const cpuId = crypto.randomUUID()
+  const cpuNames = ['AIバディ🤖', '量産型ぽんこつ⚙️', '電脳の観測者👁️', '彷徨うアルゴリズム👻', 'しりとり職人🔨', '謎の刺客🥷', '論理の探求者🧠']
+  const randomName = cpuNames[Math.floor(Math.random() * cpuNames.length)]
   const { error: pError } = await supabase.from('players').insert([{
     id: cpuId,
     room_id: roomId.value,
-    name: 'AIバディ🤖',
+    name: randomName,
     hp: Number(initialHp.value),
     is_ready: true,
     is_cpu: true,
@@ -1874,9 +1876,9 @@ const goBackToTop = async () => {
 
       <main class="w-full flex-grow min-h-0 relative z-10 mb-2 flex flex-col">
         <div class="relative w-full h-full rounded-3xl shadow-inner border-4 border-white overflow-hidden flex flex-col items-center justify-center"
-             :class="currentState === 'gameover' ? 'bg-red-50' : 'bg-slate-900'">
+             :class="(currentState === 'gameover' || currentState === 'clear') ? 'bg-red-50' : 'bg-slate-900'">
              
-          <template v-if="currentState === 'gameover'">
+          <template v-if="currentState === 'gameover' || currentState === 'clear'">
             <div class="w-full h-full flex flex-col items-center justify-center p-6 text-center animate-pulse-once">
                <h2 class="text-5xl mb-2 drop-shadow-md text-red-500 transform -rotate-3 font-black tracking-widest">GAMEOVER</h2>
                <div class="bg-white p-4 rounded-2xl border-4 border-slate-800 shadow-[6px_6px_0_0_#1e293b] my-4 w-full relative">
@@ -1899,7 +1901,7 @@ const goBackToTop = async () => {
           </template>
           
           <template v-else>
-            <div v-if="(playersList.find(p => p.id === playerId)?.hp || 0) <= 0" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center z-[15] p-4 text-center backdrop-blur-sm">
+            <div v-if="(playersList.find(p => p.id === playerId)?.hp || 0) <= 0 && currentState !== 'gameover' && currentState !== 'clear'" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center z-[15] p-4 text-center backdrop-blur-sm">
               <div class="text-6xl mb-4">💀</div>
               <p class="text-white text-2xl font-black mb-2 text-red-400">あなたは脱落しました...</p>
               <p class="text-slate-300 text-sm mb-8">他のプレイヤーの観戦中 👀</p>
@@ -1978,7 +1980,7 @@ const goBackToTop = async () => {
       </div>
 
       <div class="w-full shrink-0 mb-2 z-10 flex flex-col gap-2">
-        <template v-if="currentState === 'gameover'">
+        <template v-if="currentState === 'gameover' || currentState === 'clear'">
           <button @click="viewHistory" class="w-full py-3 rounded-2xl text-lg bg-white text-slate-800 border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] hover:bg-slate-50 transition-all active:translate-y-[4px] active:shadow-none">
             みんなの履歴を見る✨
           </button>
