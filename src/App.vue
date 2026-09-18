@@ -3,6 +3,7 @@ import { ref, computed, onMounted, nextTick, watch, onUnmounted } from 'vue'
 import { supabase } from './supabase'
 import { initAudio, playShutter, playSuccess, playFailure, playGameOver as _playGameOver } from './audio'
 import RulesModal from './components/RulesModal.vue'
+import DifficultyModal from './components/DifficultyModal.vue'
 import HowToPlayModal from './components/HowToPlayModal.vue'
 import ReportModal from './components/ReportModal.vue'
 import PrivacyPolicyModal from './components/PrivacyPolicyModal.vue'
@@ -39,6 +40,7 @@ const checkAdminPassword = async () => {
 }
 
 const showRulesModal = ref(false)
+const showDifficultyModal = ref(false)
 const showHowToPlayModal = ref(false)
 const showPrivacyPolicyModal = ref(false)
 const showReportModal = ref(false)
@@ -1513,7 +1515,12 @@ const goBackToTop = async () => {
           </div>
 
           <div v-if="!roomId" class="w-full mt-2">
-            <label class="block text-slate-700 text-sm mb-1 ml-1">難易度</label>
+            <div class="flex items-center justify-between mb-1 px-1">
+              <label class="block text-slate-700 text-sm font-bold">難易度</label>
+              <button @click="showDifficultyModal = true" class="text-xs bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full hover:bg-slate-300 transition-colors font-black flex items-center gap-1">
+                <span>❓</span>違いを見る
+              </button>
+            </div>
             <select v-model="difficulty" class="w-full p-3 rounded-xl border-2 border-slate-800 shadow-[0_4px_0_0_#1e293b] text-center text-lg focus:outline-none focus:border-cyan-500 bg-white cursor-pointer appearance-none">
               <option value="easy">初級 🔰</option>
               <option value="normal">中級 ⭐️</option>
@@ -1899,6 +1906,7 @@ const goBackToTop = async () => {
       </div>
     </template>
     
+    <DifficultyModal :isOpen="showDifficultyModal" @close="showDifficultyModal = false" />
     <RulesModal :isOpen="showRulesModal" @close="showRulesModal = false" />
     <HowToPlayModal :isOpen="showHowToPlayModal" @close="showHowToPlayModal = false" />
     <PrivacyPolicyModal :isOpen="showPrivacyPolicyModal" @close="showPrivacyPolicyModal = false" />
