@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://siritori-2nd.vercel.app/api/:path*"
+    }
+  ]
+}
