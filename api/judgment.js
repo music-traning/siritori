@@ -12,36 +12,29 @@ export default async function handler(req, res) {
     if (!imageBase64 || !lastChar) return res.status(400).json({ error: 'Missing imageBase64 or lastChar' });
     if (!roomId || !playerId) return res.status(403).json({ error: 'Forbidden: Missing roomId or playerId' });
 
-    // 部屋の存在とステータス検証 (野良APIリクエスト防止)
+    // 部屋の存在とステータス、およびターン検証
     const { data: room, error: roomError } = await supabase
       .from('rooms')
       .select('status, current_turn_index')
       .eq('id', roomId)
       .single();
-
-    if (roomError || !room) {
-      return res.status(403).json({ error: 'Forbidden: Room not found' });
-    }
-    if (room.status !== 'playing' && room.status !== 'waiting') {
-      return res.status(403).json({ error: 'Forbidden: Invalid room status' });
+    if (roomError || !room || (room.status !== 'playing' && room.status !== 'waiting')) {
+      return res.status(403).json({ error: 'Forbidden: Invalid room or status' });
     }
 
-    // ターン偽装の防止 (現在アクティブなプレイヤーIDとリクエスト元のIDが一致するか検証)
-    const { data: turnPlayers } = await supabase
+    const { data: players, error: playersError } = await supabase
       .from('players')
-      .select('id')
+      .select('*')
       .eq('room_id', roomId)
-      .order('order_index', { ascending: true });
-
-    if (!turnPlayers || turnPlayers.length === 0) {
-      return res.status(403).json({ error: 'Forbidden: No players found in room' });
+      .order('order_index', { ascending: true }); // 必ず順番通りに取得
+    if (playersError || !players || players.length === 0) {
+      return res.status(403).json({ error: 'Forbidden: Players not found' });
     }
 
-    const currentTurnIndexDB = room.current_turn_index || 0;
-    const activePlayerId = turnPlayers[currentTurnIndexDB % turnPlayers.length]?.id;
-
-    if (activePlayerId !== playerId) {
-      return res.status(403).json({ error: 'Forbidden: Not your turn (Turn Spoofing detected)' });
+    // 割り算の余り（modulo）を使って現在の正当なプレイヤーを特定
+    const activePlayer = players[room.current_turn_index % players.length];
+    if (activePlayer.id !== playerId) {
+      return res.status(403).json({ error: 'Forbidden: Not your turn' });
     }
 
     let systemPrompt = `あなたは画像に写っているものを判定するAI審査員です。
@@ -134,7 +127,6 @@ export default async function handler(req, res) {
     // ----------------------------------------------------
     // バックエンド側でのゲームロジック進行 (DB書き込み)
     // ----------------------------------------------------
-    const { data: players } = await supabase.from('players').select('*').eq('room_id', roomId).order('order_index', { ascending: true });
     
     const getNextTurnIndex = (currentIndex) => {
       if (!players) return currentIndex + 1;

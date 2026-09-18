@@ -26,36 +26,29 @@ export default async function handler(req) {
       return new Response(JSON.stringify({ error: 'Forbidden: Missing playerId' }), { status: 403 });
     }
 
-    // 部屋の存在とステータス検証 (野良APIリクエスト防止)
+    // 部屋の存在とステータス、およびターン検証
     const { data: room, error: roomError } = await supabase
       .from('rooms')
       .select('status, current_turn_index')
       .eq('id', roomId)
       .single();
-
-    if (roomError || !room) {
-      return new Response(JSON.stringify({ error: 'Forbidden: Room not found' }), { status: 403 });
-    }
-    if (room.status !== 'playing' && room.status !== 'waiting') {
-      return new Response(JSON.stringify({ error: 'Forbidden: Invalid room status' }), { status: 403 });
+    if (roomError || !room || (room.status !== 'playing' && room.status !== 'waiting')) {
+      return new Response(JSON.stringify({ error: 'Forbidden: Invalid room or status' }), { status: 403 });
     }
 
-    // ターン偽装の防止 (現在アクティブなプレイヤーIDとリクエスト元のIDが一致するか検証)
-    const { data: turnPlayers } = await supabase
+    const { data: players, error: playersError } = await supabase
       .from('players')
-      .select('id')
+      .select('*')
       .eq('room_id', roomId)
       .order('order_index', { ascending: true });
-
-    if (!turnPlayers || turnPlayers.length === 0) {
-      return new Response(JSON.stringify({ error: 'Forbidden: No players found in room' }), { status: 403 });
+    if (playersError || !players || players.length === 0) {
+      return new Response(JSON.stringify({ error: 'Forbidden: Players not found' }), { status: 403 });
     }
 
-    const currentTurnIndexDB = room.current_turn_index || 0;
-    const activePlayerId = turnPlayers[currentTurnIndexDB % turnPlayers.length]?.id;
-
-    if (activePlayerId !== playerId) {
-      return new Response(JSON.stringify({ error: 'Forbidden: Not your turn (Turn Spoofing detected)' }), { status: 403 });
+    // 割り算の余り（modulo）を使って現在の正当なプレイヤーを特定
+    const activePlayer = players[room.current_turn_index % players.length];
+    if (activePlayer.id !== playerId) {
+      return new Response(JSON.stringify({ error: 'Forbidden: Not your turn' }), { status: 403 });
     }
 
     let prompt = `あなたはプレイヤーと一緒にしりとりで遊んでいるフレンドリーなAIバディです。
@@ -119,7 +112,6 @@ export default async function handler(req) {
     }
 
     // バックエンド側でのゲームロジック進行 (DB書き込み)
-    const { data: players } = await supabase.from('players').select('*').eq('room_id', roomId).order('order_index', { ascending: true });
     
     const getNextTurnIndex = (currentIndex) => {
       if (!players) return currentIndex + 1;
