@@ -1263,11 +1263,31 @@ const surrender = async () => {
 }
 
 const resetGame = async () => {
+  if (playersList.value.length <= 1) {
+    alert('他のプレイヤーが退出したため、部屋を解散してトップへ戻ります🏠');
+    await goBackToTop();
+    return;
+  }
+  
   if (isHost.value) {
-    const updates = playersList.value.map(p => supabase.rpc('update_player_hp', { p_player_id: p.id, p_new_hp: Number(initialHp.value) }))
-    await Promise.all(updates)
-    
-    await supabase.rpc('reset_room', { p_room_id: roomId.value, p_host_id: playerId.value })
+    try {
+      await supabase.from('words').delete().eq('room_id', roomId.value);
+      
+      const hpUpdates = playersList.value.map(p => 
+        supabase.from('players').update({ hp: Number(initialHp.value) || 3 }).eq('id', p.id)
+      );
+      await Promise.all(hpUpdates);
+      
+      await supabase.from('rooms').update({ 
+        status: 'waiting',
+        current_turn_index: 0
+      }).eq('id', roomId.value);
+      
+      currentMode.value = 'lobby';
+      currentState.value = 'waiting';
+    } catch (error) {
+      console.error('Play Again Error:', error);
+    }
   }
 }
 
