@@ -1731,7 +1731,7 @@ const goBackToTop = async () => {
             今は {{ activePlayer?.name }} のターン！
           </div>
           <div class="px-3 py-1 rounded-full border-2 border-slate-800 bg-white shadow-sm font-black text-xs text-slate-600">
-            難易度: {{ roomDifficulty === 'easy' ? '初級🔰' : (roomDifficulty === 'hard' ? '上級🔥' : '中級⭐️') }}
+            難易度: {{ roomDifficulty === 'easy' ? '初級🔰' : (roomDifficulty === 'expert' ? '特級👑' : (roomDifficulty === 'hard' ? '上級🔥' : '中級⭐️')) }}
           </div>
         </div>
         <div class="mb-1 flex flex-wrap items-center justify-center gap-2">
