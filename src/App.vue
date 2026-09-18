@@ -13,6 +13,16 @@ const isAdminMode = computed(() => {
   return urlParams.has('admin')
 })
 
+const isAdminAuthenticated = ref(false)
+const adminPasswordInput = ref('')
+const checkAdminPassword = () => {
+  if (adminPasswordInput.value === import.meta.env.VITE_ADMIN_PASSWORD) {
+    isAdminAuthenticated.value = true
+  } else {
+    alert('パスワードが間違っています')
+  }
+}
+
 const showRulesModal = ref(false)
 const showHowToPlayModal = ref(false)
 const showPrivacyPolicyModal = ref(false)
@@ -1770,7 +1780,26 @@ const goBackToTop = async () => {
     <ReportModal :isOpen="showReportModal" @close="showReportModal = false" @submit="handleReportSubmit" />
   </div>
   
-  <AdminPanel v-else />
+  <div v-else-if="isAdminMode && !isAdminAuthenticated" class="min-h-[100dvh] flex items-center justify-center bg-slate-900 p-4">
+    <div class="bg-white p-6 rounded-3xl shadow-xl w-full max-w-sm flex flex-col gap-4 border-4 border-slate-800">
+      <h2 class="text-xl font-black text-center text-slate-800">管理者認証</h2>
+      <input 
+        type="password" 
+        v-model="adminPasswordInput" 
+        placeholder="パスワードを入力" 
+        class="w-full px-4 py-3 border-2 border-slate-300 rounded-2xl focus:border-cyan-400 outline-none font-bold"
+        @keyup.enter="checkAdminPassword"
+      />
+      <button 
+        @click="checkAdminPassword" 
+        class="w-full bg-cyan-400 text-white font-bold py-3 rounded-2xl active:translate-y-[4px] active:shadow-none transition-all shadow-[0_4px_0_0_#0891b2] border-2 border-transparent"
+      >
+        認証する
+      </button>
+    </div>
+  </div>
+  
+  <AdminPanel v-else-if="isAdminMode && isAdminAuthenticated" />
 </template>
 
 <style>
