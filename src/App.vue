@@ -1001,13 +1001,13 @@ const triggerCpuTurn = async (cpuPlayer) => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        lastChar: targetLetter.value,
-        rule: ruleParams,
-        difficulty: roomDifficulty.value,
-        usedWords: usedWords,
         roomId: roomId.value,
         playerId: cpuPlayer.id,
-        currentTurnIndex: currentTurnIndex.value
+        currentTurnIndex: currentTurnIndex.value,
+        lastChar: targetLetter.value,
+        difficulty: roomDifficulty.value,
+        usedWords: usedWords,
+        rule: ruleParams
       })
     })
     
@@ -1015,7 +1015,7 @@ const triggerCpuTurn = async (cpuPlayer) => {
     // CPU action logic is now entirely handled by the backend API and Realtime listeners
   } catch (error) {
     console.error('CPU turn error:', error)
-    chatData.value = { text: 'AIエラーみたい…パスするね', image: null }
+    chatData.value = { text: 'AIがエラーを起こしました🤯', image: null }
   } finally {
     isCpuThinking.value = false
   }

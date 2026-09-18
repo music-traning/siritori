@@ -4,13 +4,27 @@ import { createClient } from '@supabase/supabase-js';
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const supabase = createClient(process.env.VITE_SUPABASE_URL, process.env.VITE_SUPABASE_ANON_KEY);
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+export const config = {
+  runtime: 'edge', // Edge Runtimeを明示
+};
+
+export default async function handler(req) {
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'Method not allowed' }), { status: 405 });
+  }
   
   try {
-    const { lastChar, rule, difficulty, usedWords, roomId, playerId, currentTurnIndex } = req.body;
-    if (!lastChar) return res.status(400).json({ error: 'Missing lastChar' });
-    if (!roomId || !playerId) return res.status(403).json({ error: 'Forbidden: Missing roomId or playerId' });
+    const { roomId, playerId, currentTurnIndex, lastChar, difficulty, usedWords, rule } = await req.json();
+    
+    if (!roomId) {
+      return new Response(JSON.stringify({ error: 'Forbidden: Missing roomId' }), { status: 403 });
+    }
+    if (!lastChar) {
+      return new Response(JSON.stringify({ error: 'Missing lastChar' }), { status: 400 });
+    }
+    if (!playerId) {
+      return new Response(JSON.stringify({ error: 'Forbidden: Missing playerId' }), { status: 403 });
+    }
 
     // 部屋の存在とステータス検証 (野良APIリクエスト防止)
     const { data: room, error: roomError } = await supabase
@@ -20,10 +34,10 @@ export default async function handler(req, res) {
       .single();
 
     if (roomError || !room) {
-      return res.status(403).json({ error: 'Forbidden: Room not found' });
+      return new Response(JSON.stringify({ error: 'Forbidden: Room not found' }), { status: 403 });
     }
     if (room.status !== 'playing' && room.status !== 'waiting') {
-      return res.status(403).json({ error: 'Forbidden: Invalid room status' });
+      return new Response(JSON.stringify({ error: 'Forbidden: Invalid room status' }), { status: 403 });
     }
 
     let prompt = `あなたはプレイヤーと一緒にしりとりで遊んでいるフレンドリーなAIバディです。
@@ -86,9 +100,7 @@ export default async function handler(req, res) {
       result.comment = `う〜ん、『${lastChar}』から始まる言葉がどうしても思いつかないや…降参するね🤖💦`;
     }
 
-    // ----------------------------------------------------
     // バックエンド側でのゲームロジック進行 (DB書き込み)
-    // ----------------------------------------------------
     const { data: players } = await supabase.from('players').select('*').eq('room_id', roomId).order('order_index', { ascending: true });
     
     const getNextTurnIndex = (currentIndex) => {
@@ -107,7 +119,6 @@ export default async function handler(req, res) {
     const isNGameOver = result.next_char === 'ん' || result.reading?.endsWith('ん');
 
     if (isNGameOver) {
-      // 「ん」で終わった場合: ゲームオーバー
       await supabase.from('rooms').update({ status: 'gameover' }).eq('id', roomId);
       await supabase.from('words').insert([{
         room_id: roomId,
@@ -119,7 +130,6 @@ export default async function handler(req, res) {
         image_base64: null
       }]);
     } else {
-      // 正解: 単語を登録してターンを進行
       await supabase.from('words').insert([{
         room_id: roomId,
         player_id: playerId,
@@ -135,9 +145,12 @@ export default async function handler(req, res) {
       }).eq('id', roomId);
     }
 
-    return res.status(200).json(result);
+    return new Response(JSON.stringify(result), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'CPU action failed' });
+    return new Response(JSON.stringify({ error: 'CPU action failed' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }
