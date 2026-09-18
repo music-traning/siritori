@@ -630,6 +630,10 @@ const startGame = async () => {
 
 const addCpuPlayer = async () => {
   if (!isHost.value) return
+  if (playersList.value.length >= roomMaxPlayers.value) {
+    alert('部屋が満員です！これ以上追加できません。')
+    return
+  }
   const cpuId = crypto.randomUUID()
   const cpuNames = ['AIバディ🤖', '量産型ぽんこつ⚙️', '電脳の観測者👁️', '彷徨うアルゴリズム👻', 'しりとり職人🔨', '謎の刺客🥷', '論理の探求者🧠']
   const randomName = cpuNames[Math.floor(Math.random() * cpuNames.length)]
@@ -1509,7 +1513,8 @@ const goBackToTop = async () => {
           <button 
             v-if="!isPublicRoom && isHost"
             @click="addCpuPlayer"
-            class="w-full py-3 mb-2 rounded-2xl text-lg text-slate-800 bg-yellow-400 border-4 border-slate-800 shadow-[0_4px_0_0_#1e293b] hover:bg-yellow-300 transition-all active:translate-y-[4px] active:shadow-none"
+            :disabled="playersList.length >= roomMaxPlayers"
+            class="w-full py-3 mb-2 rounded-2xl text-lg text-slate-800 bg-yellow-400 border-4 border-slate-800 shadow-[0_4px_0_0_#1e293b] hover:bg-yellow-300 transition-all active:translate-y-[4px] active:shadow-none disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-[0_4px_0_0_#1e293b]"
           >
             CPUと1人で遊ぶ🤖
           </button>
@@ -1517,7 +1522,8 @@ const goBackToTop = async () => {
           <button 
             v-if="!isPublicRoom"
             @click="shareRoomLink"
-            class="w-full py-4 rounded-2xl text-xl text-slate-800 bg-white border-4 border-slate-800 shadow-[0_6px_0_0_#1e293b] transition-all duration-150 active:shadow-none active:translate-y-[6px]"
+            :disabled="playersList.length >= roomMaxPlayers"
+            class="w-full py-4 rounded-2xl text-xl text-slate-800 bg-white border-4 border-slate-800 shadow-[0_6px_0_0_#1e293b] transition-all duration-150 active:shadow-none active:translate-y-[6px] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-[0_6px_0_0_#1e293b]"
           >
             友達を招待する🔗
           </button>
