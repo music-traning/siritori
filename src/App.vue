@@ -505,8 +505,6 @@ const joinRandomRoom = async () => {
     playerName.value = validName
     localStorage.setItem('shiritori_player_name', playerName.value)
     
-    difficulty.value = 'normal'
-    initialHp.value = 3
     isImageShareEnabled.value = false
 
     const randomChar = hiraganaList[Math.floor(Math.random() * hiraganaList.length)]
@@ -514,10 +512,10 @@ const joinRandomRoom = async () => {
     const { data: newRoomId, error } = await supabase.rpc('find_or_create_public_room', {
       p_player_id: playerId.value,
       p_name: String(playerName.value),
-      p_hp: 3,
-      p_difficulty: 'normal',
+      p_hp: Number(initialHp.value),
+      p_difficulty: difficulty.value,
       p_random_char: randomChar,
-      p_max_players: 5
+      p_max_players: Number(maxPlayers.value)
     })
 
     if (error || !newRoomId) {
@@ -1504,6 +1502,7 @@ const goBackToTop = async () => {
               <option value="easy">初級 🔰</option>
               <option value="normal">中級 ⭐️</option>
               <option value="hard">上級 🔥</option>
+              <option value="expert">特級 👑</option>
             </select>
           </div>
 

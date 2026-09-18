@@ -100,14 +100,19 @@ export default async function handler(req, res) {
 
     systemPrompt += `5. 【不正検知ルール(最優先)】: 画像が「別のスマートフォン、PCモニター、タブレット、テレビなどのデジタル画面を撮影したもの」であると判断できる場合（モアレ現象、ピクセルの網目、画面の反射光、デバイスの枠などが確認できる場合）、被写体が他の条件を全て満たしていても絶対に is_valid: false としてください。その際の comment は必ず「画面を写しちゃダメだよ！実物を探してね🙅‍♀️」としてください。\n`;
 
-    systemPrompt += `\n【難易度に応じた判定方針】\n`;
+    let difficultyInstruction = '';
     if (difficulty === 'easy') {
-      systemPrompt += `判定基準を寛容にし、少しでも条件に掠っていれば正解とする。子供と遊ぶように優しく。\n`;
+      difficultyInstruction = 'あなたは『お笑いこじつけ審査員』です。写真に写っているものが何であれ、100%の確率で指定の文字から始まる名前に強引にこじつけて『正解』にしてください。（例: 犬の写真で「あ」なら「あっ！犬だ」「あかい首輪」など）。笑える言い訳をコメントに書いてください。ただし、最初と最後の文字のルールだけは絶対に厳守すること。';
+    } else if (difficulty === 'normal') {
+      difficultyInstruction = '50%の確率で、対象物を指定の文字から始まる名前に強引にこじつけて正解にしてください（お笑い要素）。残りの50%は通常の妥当な判定を行ってください。';
     } else if (difficulty === 'hard') {
-      systemPrompt += `条件を極めて厳密に解釈し、少しでも疑わしい場合は容赦無く不正解とする。審査員のように厳しく。\n`;
+      difficultyInstruction = '10%の確率で強引なこじつけで正解にします。残りの90%は厳密に判定してください。';
+    } else if (difficulty === 'expert') {
+      difficultyInstruction = 'あなたは『極めて厳格な審査員』です。写真に明確に写っているもの以外は一切認めません。一切の強引なこじつけ、ダジャレ、言い訳を許さず、少しでもズレていれば容赦なく『不正解』にしてください。マジモノのしりとりを行います。';
     } else {
-      systemPrompt += `一般的なしりとりの基準で判定すること。\n`;
+      difficultyInstruction = '一般的なしりとりの基準で判定すること。';
     }
+    systemPrompt += `\n【難易度に応じた判定方針】\n${difficultyInstruction}\n`;
 
     systemPrompt += `
 【ユーザーへのコメント(comment)のガイドライン】

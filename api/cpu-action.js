@@ -51,7 +51,21 @@ export default async function handler(req) {
       return new Response(JSON.stringify({ error: 'Forbidden: Not your turn' }), { status: 403 });
     }
 
-    let prompt = `あなたはプレイヤーと一緒にしりとりで遊んでいるフレンドリーなAIバディです。
+    let difficultyInstruction = '';
+    if (difficulty === 'easy') {
+      difficultyInstruction = 'あなたは『お笑いこじつけ審査員』です。写真に写っているものが何であれ、100%の確率で指定の文字から始まる名前に強引にこじつけて『正解』にしてください。（例: 犬の写真で「あ」なら「あっ！犬だ」「あかい首輪」など）。笑える言い訳をコメントに書いてください。ただし、最初と最後の文字のルールだけは絶対に厳守すること。';
+    } else if (difficulty === 'normal') {
+      difficultyInstruction = '50%の確率で、対象物を指定の文字から始まる名前に強引にこじつけて正解にしてください（お笑い要素）。残りの50%は通常の妥当な判定を行ってください。';
+    } else if (difficulty === 'hard') {
+      difficultyInstruction = '10%の確率で強引なこじつけで正解にします。残りの90%は厳密に判定してください。';
+    } else if (difficulty === 'expert') {
+      difficultyInstruction = 'あなたは『極めて厳格な審査員』です。写真に明確に写っているもの以外は一切認めません。一切の強引なこじつけ、ダジャレ、言い訳を許さず、少しでもズレていれば容赦なく『不正解』にしてください。マジモノのしりとりを行います。';
+    } else {
+      difficultyInstruction = '一般的なしりとりの基準で判定すること。';
+    }
+    
+    let prompt = `あなたはプレイヤーと一緒にしりとりで遊んでいるフレンドリーなAIバディです。\n【難易度に応じた方針（これに沿って生成する単語のこじつけ度合いを調整してください）】\n${difficultyInstruction}\n\n`;
+    prompt += `
 以下の【厳格なルール】に従って、単語を1つ生成してください。
 
 【厳格なルール】
