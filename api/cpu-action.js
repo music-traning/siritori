@@ -9,14 +9,25 @@ export default async function handler(req, res) {
     const { lastChar, rule, difficulty } = req.body;
     if (!lastChar) return res.status(400).json({ error: 'Missing lastChar' });
 
-    let prompt = `しりとりで「${lastChar}」から始まる単語を考えてください。`;
+    let prompt = `あなたはプレイヤーと一緒にしりとりで遊んでいるフレンドリーなAIバディです。
+以下の【厳格なルール】に従って、単語を1つ生成してください。
+
+【厳格なルール】
+1. 単語のひらがな読みの最初の1文字が「${lastChar}」と完全に一致する単語を絶対に選んでください（AI特有の忖度は禁止）。
+`;
     if (rule && rule.theme_condition) {
-      prompt += `\n特別ルール: ${rule.theme_condition}`;
+      prompt += `2. 特別ルール(必須条件): ${rule.theme_condition}\n`;
     }
     if (rule && rule.forbidden_elements) {
-      prompt += `\nNG条件: ${rule.forbidden_elements}`;
+      prompt += `3. NG条件(存在してはいけない): ${rule.forbidden_elements}\n`;
     }
-    prompt += `\n単語を一つ選び、JSON形式で返答してください。AIらしいメタ的なセリフをcommentに含めてください。条件が厳しすぎる場合は「ん」で終わる単語で自爆しても構いません。`;
+    
+    prompt += `
+【ユーザーへのコメント(comment)のガイドライン】
+単語の選定ロジックは厳格に行いますが、出力する comment は、一緒に遊んでいる親しみやすいAIバディとしてのセリフにしてください。
+- 成功時の例: 「『${lastChar}』だね！じゃあ『〇〇』はどうかな？ 小さくて探すの大変だけどね🤭 次は『〇（最後の文字）』だよ！」
+- 条件が厳しすぎて見つからず、「ん」で終わる単語で自爆する場合の例: 「う〜ん、『${lastChar}』から始まってその条件を満たすもの…あっ、『〇〇ん』しか思いつかない！負けちゃった〜🤖💦」
+単語を一つ選び、指定されたJSON形式で返答してください。`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.5-flash-lite',

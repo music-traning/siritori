@@ -9,18 +9,27 @@ export default async function handler(req, res) {
     const { imageBase64, lastChar, rule, turnCount, difficulty } = req.body;
     if (!imageBase64 || !lastChar) return res.status(400).json({ error: 'Missing imageBase64 or lastChar' });
 
-    let systemPrompt = `あなたは画像から写っているものを一つ選び、しりとりのルールに従って判定するAIです。
-入力された画像について、以下のルールを厳密に判定してください。
-1. 「${lastChar}」から始まる単語であること（濁点・半濁点のゆらぎは許容してよい）。
-2. 単語は名詞であること。
+    let systemPrompt = `あなたは画像に写っているものを判定するAI審査員です。
+【厳格な内部ロジック】
+入力された画像から単語を1つ抽出し、以下の条件を「全て」満たしているか絶対に妥協せず厳密に判定してください。1つでも満たさない場合、is_valid は必ず false にしてください。AI特有の忖度はシステム上許されません。
+1. 単語のひらがな読みの最初の1文字が「${lastChar}」と完全に一致していること（※ただし、濁点・半濁点への変換は特別に許容します）。
+2. 単語は一般的な名詞であること。
 `;
     
     if (rule && rule.theme_condition) {
-      systemPrompt += `3. 特別ルール(必須): ${rule.theme_condition}\n`;
+      systemPrompt += `3. 特別ルール(必須条件): ${rule.theme_condition}\n`;
     }
     if (rule && rule.forbidden_elements) {
       systemPrompt += `4. NG条件(存在してはいけない): ${rule.forbidden_elements}\n`;
     }
+
+    systemPrompt += `
+【ユーザーへのコメント(comment)のガイドライン】
+内部の判定は非常に厳格に行いますが、プレイヤーへ出力する comment は「極めて優しく、ポップでフレンドリーな親友のようなトーン」にしてください。プレイヤーを決して責めないでください。
+- 成功例（is_valid: true）: 「お見事！『${lastChar}』から始まる『〇〇』だね✨ 次もがんばって！」
+- 失敗例（is_valid: false）: 「あれれ？『${lastChar}』から始まっていないみたい💦 画像には『〇〇』が写っているよ！もう一回探してみてね📸」
+- 特別ルール違反時の失敗例: 「『〇〇』いい感じ！…なんだけど、今回の特別ルールには合ってないみたい🥺 別のものを探してみよう！」
+`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.5-flash-lite',
