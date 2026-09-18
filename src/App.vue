@@ -1205,6 +1205,9 @@ const handleAction = async () => {
     if (currentState.value !== 'gameover' && currentState.value !== 'clear') {
       isProcessingGameOver.value = false
     }
+    if (videoRef.value) {
+      videoRef.value.play().catch(e => console.error("Video play error:", e));
+    }
   }
 }
 
@@ -1263,51 +1266,48 @@ const surrender = async () => {
 }
 
 const resetGame = async () => {
-  // 1. 人数のチェック
-  if (playersList.value.length <= 1) {
-    alert('他のプレイヤーが退出したため、部屋を解散してトップへ戻ります🏠');
-    if (typeof goBackToTop === 'function') await goBackToTop();
-    return;
-  }
-  
-  // 2. 再戦フロー（ロビーへ戻る）
-  if (isHost.value) {
-    try {
-      isJudging.value = true;
+  try {
+    isJudging.value = true;
+    
+    // 1. DBから現在のプレイヤー数を直接取得して確実な判断を行う
+    const { data: currentPlayers, error } = await supabase
+      .from('players')
+      .select('id')
+      .eq('room_id', roomId.value);
       
-      // 履歴の削除
+    // 確実な人数チェック
+    if (error || !currentPlayers || currentPlayers.length <= 1) {
+      alert('他のプレイヤーが退出したため、部屋を解散してトップへ戻ります🏠');
+      if (typeof goBackToTop === 'function') await goBackToTop();
+      else if (typeof leaveRoom === 'function') await leaveRoom();
+      return;
+    }
+    
+    // 2. 再戦フロー（ロビーへ戻る）
+    if (isHost.value) {
       await supabase.from('words').delete().eq('room_id', roomId.value);
       
-      // 部屋の設定から初期HPを安全に取得（取得できない場合は3）
       const defaultHp = roomData.value?.initial_hp || 3;
+      if (myPlayer.value) myPlayer.value.hp = defaultHp;
       
-      // ローカルのHPを即座に回復（ドクロ画面の誤表示を完全に防ぐ）
-      if (myPlayer.value) {
-        myPlayer.value.hp = defaultHp;
-      }
-
-      // DBの全プレイヤーのHPリセット
-      const hpUpdates = playersList.value.map(p => 
+      const hpUpdates = currentPlayers.map(p => 
         supabase.from('players').update({ hp: defaultHp }).eq('id', p.id)
       );
       await Promise.all(hpUpdates);
       
-      // 部屋の状態をロビーに戻し、ターンをリセット
       await supabase.from('rooms').update({ 
         status: 'waiting',
         current_turn_index: 0
       }).eq('id', roomId.value);
       
-      // フロントエンドのUI切り替えを確実に行う
       currentMode.value = 'lobby';
       currentState.value = 'waiting';
-      
-    } catch (error) {
-      console.error('Play Again Error:', error);
-      alert('リセット処理中にエラーが発生しました');
-    } finally {
-      isJudging.value = false;
     }
+  } catch (error) {
+    console.error('Play Again Error:', error);
+    alert('リセット処理中にエラーが発生しました');
+  } finally {
+    isJudging.value = false;
   }
 }
 
