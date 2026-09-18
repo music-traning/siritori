@@ -994,6 +994,9 @@ const triggerCpuTurn = async (cpuPlayer) => {
   chatData.value = { text: 'AIが思考中...🧠', image: null }
   
   try {
+    const { data: wordsData } = await supabase.from('words').select('detected_word').eq('room_id', roomId.value)
+    const usedWords = wordsData ? wordsData.map(w => w.detected_word) : []
+
     const ruleParams = {
       theme_condition: currentRule.value?.theme_condition || '特になし',
       forbidden_elements: currentRule.value?.forbidden_elements || '特になし'
@@ -1005,7 +1008,8 @@ const triggerCpuTurn = async (cpuPlayer) => {
       body: JSON.stringify({
         lastChar: targetLetter.value,
         rule: ruleParams,
-        difficulty: roomDifficulty.value
+        difficulty: roomDifficulty.value,
+        usedWords: usedWords
       })
     })
     
