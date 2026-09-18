@@ -175,19 +175,7 @@ export default async function handler(req, res) {
     // バックエンド側でのゲームロジック進行 (DB書き込み)
     // ----------------------------------------------------
     
-    const getNextTurnIndex = (currentIndex) => {
-      if (!players) return currentIndex + 1;
-      const numPlayers = players.length;
-      if (numPlayers === 0) return currentIndex + 1;
-      let nextIndex = currentIndex + 1;
-      for(let i=0; i<numPlayers; i++) {
-        const p = players[nextIndex % numPlayers];
-        if (p && p.hp > 0) return nextIndex;
-        nextIndex++;
-      }
-      return nextIndex;
-    };
-
+    
     const isNGameOver = result.is_game_over || result.reading?.endsWith('ん') || result.next_char === 'ん';
 
     if (result.is_inappropriate || (!result.is_valid && !isNGameOver)) {
