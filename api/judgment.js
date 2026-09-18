@@ -8,9 +8,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
   try {
-    const { imageBase64, lastChar, rule, turnCount, difficulty, roomId } = req.body;
+    const { imageBase64, lastChar, rule, turnCount, difficulty, roomId, playerId, currentTurnIndex, uploadedUrl } = req.body;
     if (!imageBase64 || !lastChar) return res.status(400).json({ error: 'Missing imageBase64 or lastChar' });
-    if (!roomId) return res.status(403).json({ error: 'Forbidden: Missing roomId' });
+    if (!roomId || !playerId) return res.status(403).json({ error: 'Forbidden: Missing roomId or playerId' });
 
     // 部屋の存在とステータス検証 (野良APIリクエスト防止)
     const { data: room, error: roomError } = await supabase
@@ -91,6 +91,71 @@ export default async function handler(req, res) {
     if (result.reading && result.reading.charAt(0) !== lastChar) {
       result.is_valid = false;
       result.comment = `あれれ？『${lastChar}』から始まっていないみたい💦 もう一度探してみてね！`;
+    }
+
+    // ----------------------------------------------------
+    // バックエンド側でのゲームロジック進行 (DB書き込み)
+    // ----------------------------------------------------
+    const { data: players } = await supabase.from('players').select('*').eq('room_id', roomId).order('order_index', { ascending: true });
+    
+    const getNextTurnIndex = (currentIndex) => {
+      if (!players) return currentIndex + 1;
+      const numPlayers = players.length;
+      if (numPlayers === 0) return currentIndex + 1;
+      let nextIndex = currentIndex + 1;
+      for(let i=0; i<numPlayers; i++) {
+        const p = players[nextIndex % numPlayers];
+        if (p && p.hp > 0) return nextIndex;
+        nextIndex++;
+      }
+      return nextIndex;
+    };
+
+    const isNGameOver = result.is_game_over || result.reading?.endsWith('ん') || result.next_char === 'ん';
+
+    if (result.is_inappropriate || (!result.is_valid && !isNGameOver)) {
+      // 失敗・不適切な画像: プレイヤーのHPを減算し、勝敗判定
+      const p = players?.find(x => x.id === playerId);
+      if (p) {
+        const newHp = Math.max(0, p.hp - 1);
+        await supabase.from('players').update({ hp: newHp }).eq('id', playerId);
+        
+        const alivePlayers = players.map(x => x.id === playerId ? { ...x, hp: newHp } : x).filter(x => x.hp > 0);
+        if (alivePlayers.length === 0) {
+          // 全滅
+          await supabase.from('rooms').update({ status: 'gameover' }).eq('id', roomId);
+          await supabase.from('words').insert([{
+            room_id: roomId, player_id: playerId, detected_word: '全滅', reading: 'ぜんめつ', next_char: 'ん', comment: '生存者が0人になりました...全員脱落です💀', image_base64: null
+          }]);
+        } else if (players.length > 1 && alivePlayers.length === 1) {
+          // 1人だけ生存 (サバイバル勝利)
+          await supabase.from('rooms').update({ status: 'gameover' }).eq('id', roomId);
+          const winner = alivePlayers[0];
+          await supabase.from('words').insert([{
+            room_id: roomId, player_id: winner.id, detected_word: '優勝', reading: 'ゆうしょう', next_char: 'ん', comment: `${winner.name} さんの完全勝利です！🎉`, image_base64: null
+          }]);
+        } else {
+          // ゲーム続行: ターンを進める
+          await supabase.from('rooms').update({
+            current_turn_index: getNextTurnIndex(currentTurnIndex)
+          }).eq('id', roomId);
+        }
+      }
+    } else if (isNGameOver) {
+      // 「ん」で終わる自爆
+      await supabase.from('rooms').update({ status: 'gameover' }).eq('id', roomId);
+      await supabase.from('words').insert([{
+        room_id: roomId, player_id: playerId, detected_word: result.detected_word, reading: result.reading, next_char: result.next_char, comment: result.comment, image_base64: uploadedUrl || null
+      }]);
+    } else if (result.is_valid) {
+      // 正解: 単語を挿入し、ターンを進める
+      await supabase.from('words').insert([{
+        room_id: roomId, player_id: playerId, detected_word: result.detected_word, reading: result.reading, next_char: result.next_char, comment: result.comment, image_base64: uploadedUrl || null
+      }]);
+      await supabase.from('rooms').update({
+        current_turn_index: getNextTurnIndex(currentTurnIndex),
+        current_char: result.next_char
+      }).eq('id', roomId);
     }
 
     return res.status(200).json(result);

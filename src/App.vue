@@ -986,7 +986,7 @@ const triggerCpuTurn = async (cpuPlayer) => {
   if (isCpuThinking.value) return
   isCpuThinking.value = true
   
-  chatData.value = { text: 'AIが思考中...🧠', image: null }
+  chatData.value = { text: 'AI思考中...🤔', image: null }
   
   try {
     const { data: wordsData } = await supabase.from('words').select('detected_word').eq('room_id', roomId.value)
@@ -1005,126 +1005,24 @@ const triggerCpuTurn = async (cpuPlayer) => {
         rule: ruleParams,
         difficulty: roomDifficulty.value,
         usedWords: usedWords,
-        roomId: roomId.value
+        roomId: roomId.value,
+        playerId: cpuPlayer.id,
+        currentTurnIndex: currentTurnIndex.value
       })
     })
     
     if (!response.ok) throw new Error('CPU API failed')
-    const result = await response.json()
-    
-    if (result.next_char === 'ん' || result.reading?.endsWith('ん')) {
-      const statusSuccess = await safeUpdateRoomStatus(roomId.value, 'playing', 'gameover')
-      if (statusSuccess) {
-         const payload = {
-            room_id: roomId.value,
-            player_id: cpuPlayer.id,
-            detected_word: result.detected_word,
-            reading: result.reading,
-            next_char: result.next_char,
-            comment: result.comment,
-            image_base64: null
-         }
-         await supabase.from('words').insert([payload])
-      }
-    } else {
-       const turnSuccess = await safeUpdateRoomTurn(roomId.value, currentTurnIndex.value, getNextTurnIndex(currentTurnIndex.value), result.next_char)
-       if (turnSuccess) {
-         const payload = {
-            room_id: roomId.value,
-            player_id: cpuPlayer.id,
-            detected_word: result.detected_word,
-            reading: result.reading,
-            next_char: result.next_char,
-            comment: result.comment,
-            image_base64: null
-         }
-         await supabase.from('words').insert([payload])
-       }
-    }
+    // CPU action logic is now entirely handled by the backend API and Realtime listeners
   } catch (error) {
     console.error('CPU turn error:', error)
-    chatData.value = { text: 'AIがエラーを起こしました🤯 パスします...', image: null }
-    const expectedTurn = currentTurnIndex.value
-    const newHp = Math.max(0, cpuPlayer.hp - 1)
-    await safeUpdatePlayerHp(cpuPlayer.id, cpuPlayer.hp, newHp, roomId.value)
-    
-    if (newHp <= 0) {
-      const isOver = await checkWinCondition()
-      if (!isOver) {
-         await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
-      }
-    } else {
-       await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
-    }
+    chatData.value = { text: 'AIエラーみたい…パスするね', image: null }
   } finally {
     isCpuThinking.value = false
   }
 }
 
-const checkWinCondition = async () => {
-  if (isProcessingGameOver.value) return true
-  const alivePlayers = playersList.value.filter(p => p.hp > 0)
-
-  if (alivePlayers.length === 0) {
-    const statusSuccess = await safeUpdateRoomStatus(roomId.value, 'playing', 'gameover')
-    if (!statusSuccess) return true
-
-    isProcessingGameOver.value = true
-    playGameOver()
-    gameOverData.value = {
-      word: '全滅',
-      reading: 'ぜんめつ',
-      comment: '全員脱落！履歴から結果を見てみよう👀',
-      image: null
-    }
-    chatData.value = { text: 'HPがなくなってしまったね…💀 全員脱落でゲームオーバー！', image: null }
-    currentState.value = 'gameover'
-    
-    const payload = {
-      room_id: roomId.value,
-      player_id: playerId.value,
-      detected_word: '全滅',
-      reading: 'ぜんめつ',
-      next_char: 'ん', 
-      comment: '生存者が0人になりました...全員脱落です💀',
-      image_base64: null
-    }
-    const { error: wError } = await supabase.from('words').insert([payload])
-    if (wError) console.error('Words insert error (wipeout):', wError)
-    return true
-  }
-
-  if (playersList.value.length > 1 && alivePlayers.length === 1) {
-    const statusSuccess = await safeUpdateRoomStatus(roomId.value, 'playing', 'gameover')
-    if (!statusSuccess) return true
-
-    isProcessingGameOver.value = true
-    const winner = alivePlayers[0]
-    playSuccess()
-    gameOverData.value = {
-      word: 'サバイバル勝利',
-      reading: 'さばいばるしょうり',
-      comment: `${winner.name} さんの完全勝利です！🎉 他のプレイヤーは全員脱落しました💀`,
-      image: null
-    }
-    chatData.value = { text: `${winner.name} さんの完全勝利です！🎉`, image: null }
-    currentState.value = 'clear'
-    
-    const payload = {
-      room_id: roomId.value,
-      player_id: winner.id,
-      detected_word: '優勝',
-      reading: 'ゆうしょう',
-      next_char: 'ん', 
-      comment: `${winner.name} さんの完全勝利です！🎉`,
-      image_base64: null
-    }
-    const { error: wError } = await supabase.from('words').insert([payload])
-    if (wError) console.error('Words insert error (survival):', wError)
-    return true
-  }
-  return false
-}
+// Win condition logic is now migrated to backend API
+// Frontend now relies on Realtime listener for gameover updates
 
 const startCamera = async () => {
   try {
@@ -1137,21 +1035,14 @@ const startCamera = async () => {
     }
   } catch (err) {
     console.error('Camera error:', err)
-    alert('カメラの起動に失敗しました😢')
   }
 }
 
-const captureAndCompressImage = () => {
-  if (!videoRef.value || !canvasRef.value) return null
-  const video = videoRef.value
-  const canvas = canvasRef.value
-  const context = canvas.getContext('2d')
-  
-  canvas.width = video.videoWidth
-  canvas.height = video.videoHeight
-  context.drawImage(video, 0, 0, canvas.width, canvas.height)
-  
-  return canvas.toDataURL('image/jpeg', 0.6)
+const stopCamera = () => {
+  if (stream.value) {
+    stream.value.getTracks().forEach(track => track.stop())
+    stream.value = null
+  }
 }
 
 const uploadImageToStorage = async (base64Str) => {
@@ -1166,76 +1057,55 @@ const uploadImageToStorage = async (base64Str) => {
       for (let i = 0; i < slice.length; i++) {
         byteNumbers[i] = slice.charCodeAt(i);
       }
-      byteArrays.push(new Uint8Array(byteNumbers));
+      const byteArray = new Uint8Array(byteNumbers);
+      byteArrays.push(byteArray);
     }
-    const blob = new Blob(byteArrays, {type: 'image/jpeg'});
-    const fileName = `${roomId.value}/${Date.now()}_${Math.floor(Math.random()*1000)}.jpg`;
-    const { data, error } = await supabase.storage.from('shiritori-images').upload(fileName, blob, { contentType: 'image/jpeg' });
-    if (!error) {
-      const { data: signedData, error: signedError } = await supabase.storage.from('shiritori-images').createSignedUrl(fileName, 3600);
-      if (!signedError && signedData) {
-        return signedData.signedUrl;
-      }
+    const blob = new Blob(byteArrays, { type: 'image/jpeg' });
+    const fileName = `${roomId.value}/${Date.now()}.jpg`;
+    
+    const { data, error } = await supabase.storage
+      .from('photos')
+      .upload(fileName, blob, { contentType: 'image/jpeg' });
+      
+    if (error) {
+      console.error('Upload error:', error);
+      return null;
     }
-  } catch (err) {
-    console.error('Image upload failed:', err);
+    const { data: urlData } = supabase.storage.from('photos').getPublicUrl(fileName);
+    return urlData.publicUrl;
+  } catch (e) {
+    console.error('Error processing upload:', e);
+    return null;
   }
-  return null;
+}
+
+const captureImage = () => {
+  if (!videoRef.value || !canvasRef.value) return null
+  const video = videoRef.value
+  const canvas = canvasRef.value
+  const context = canvas.getContext('2d')
+  
+  canvas.width = video.videoWidth
+  canvas.height = video.videoHeight
+  context.drawImage(video, 0, 0, canvas.width, canvas.height)
+  
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.6)
+  return dataUrl.replace(/^data:image\/\w+;base64,/, '')
 }
 
 const handleAction = async () => {
-  if (!isMyTurn.value || currentState.value === 'processing') return
-  currentState.value = 'processing'
+  if (currentState.value !== 'initial') return
+  if (!isMyTurn.value) return
   
-  const base64DataWithPrefix = captureAndCompressImage()
-  if (base64DataWithPrefix) {
-    capturedImage.value = base64DataWithPrefix
-    if (videoRef.value) videoRef.value.pause()
-  } else {
-    chatData.value = { text: '画像のキャプチャに失敗しました😢', image: null }
+  currentState.value = 'processing'
+  const base64Data = captureImage()
+  if (!base64Data) {
     currentState.value = 'initial'
     return
   }
 
-  const base64Data = base64DataWithPrefix.replace(/^data:image\/\w+;base64,/, '')
-  chatData.value = { text: 'AIがガン見でチェック中...👀✨', image: null }
-
-  if (turnCount.value >= 10) {
-    const statusSuccess = await safeUpdateRoomStatus(roomId.value, 'playing', 'gameover')
-    if (!statusSuccess) {
-      currentState.value = 'initial'
-      return
-    }
-
-    if (isProcessingGameOver.value) return
-    isProcessingGameOver.value = true
-    playSuccess()
-    
-    let uploadedUrl = null;
-    if (roomShareEnabled.value) uploadedUrl = await uploadImageToStorage(base64DataWithPrefix);
-
-    gameOverData.value = {
-      word: '10ターン達成',
-      reading: 'じゅったーんたっせい',
-      comment: '10ターン耐え抜いた！プレイヤー達の完全勝利（引き分け）！🎉',
-      image: uploadedUrl
-    }
-    chatData.value = { text: '10ターン耐え抜いた！プレイヤー達の完全勝利（引き分け）！🎉', image: null }
-    currentState.value = 'gameover'
-    
-    const payload = {
-      room_id: roomId.value,
-      player_id: playerId.value,
-      detected_word: '引き分け',
-      reading: 'ひきわけ',
-      next_char: 'ん',
-      comment: '10ターン耐え抜いた！プレイヤー達の完全勝利（引き分け）！🎉',
-      image_base64: uploadedUrl
-    }
-    const { error: wError } = await supabase.from('words').insert([payload])
-    if (wError) console.error('Words insert error (draw):', wError)
-    return
-  }
+  const base64DataWithPrefix = `data:image/jpeg;base64,${base64Data}`
+  capturedImage.value = base64DataWithPrefix
 
   try {
     const controller = new AbortController()
@@ -1244,6 +1114,11 @@ const handleAction = async () => {
     const ruleParams = {
       theme_condition: currentRule.value?.theme_condition || '特になし',
       forbidden_elements: currentRule.value?.forbidden_elements || '特になし'
+    }
+
+    let uploadedUrl = null;
+    if (roomShareEnabled.value) {
+      uploadedUrl = await uploadImageToStorage(base64DataWithPrefix);
     }
 
     const response = await fetch('/api/judgment', {
@@ -1255,7 +1130,10 @@ const handleAction = async () => {
         rule: ruleParams,
         turnCount: turnCount.value,
         difficulty: roomDifficulty.value,
-        roomId: roomId.value
+        roomId: roomId.value,
+        playerId: playerId.value,
+        currentTurnIndex: currentTurnIndex.value,
+        uploadedUrl: uploadedUrl
       }),
       signal: controller.signal
     })
@@ -1265,150 +1143,25 @@ const handleAction = async () => {
     if (!response.ok) throw new Error('API request failed')
     const result = await response.json()
 
-    if (result.is_inappropriate) {
-      const myPlayerInfo = playersList.value.find(p => p.id === playerId.value)
-      if (myPlayerInfo) {
-        const expectedHp = myPlayerInfo.hp
-        const newHp = Math.max(0, expectedHp - 1)
-        const hpSuccess = await safeUpdatePlayerHp(playerId.value, expectedHp, newHp, roomId.value)
-        if (!hpSuccess) {
-          currentState.value = 'initial'
-          return
-        }
-        
-        playFailure()
-        chatData.value = { text: result.comment || '不適切な画像のため弾かれました🚨', image: null }
-        myPlayerInfo.hp = newHp
-        
-        if (newHp <= 0) {
-          const isOver = await checkWinCondition()
-          if (!isOver) {
-            const expectedTurn = currentTurnIndex.value
-            const turnSuccess = await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
-            if (!turnSuccess) {
-              currentState.value = 'initial'
-              return
-            }
-            currentState.value = 'initial'
-          }
-        } else {
-          currentState.value = 'failure'
-        }
-      } else {
-        currentState.value = 'failure'
-      }
-    } else if (result.is_game_over || result.reading?.endsWith('ん') || result.next_char === 'ん') {
-      const statusSuccess = await safeUpdateRoomStatus(roomId.value, 'playing', 'gameover')
-      if (!statusSuccess) {
-        currentState.value = 'initial'
-        return
-      }
-
-      if (isProcessingGameOver.value) return
-      isProcessingGameOver.value = true
-      playGameOver()
-      
-      let uploadedUrl = null;
-      if (roomShareEnabled.value) uploadedUrl = await uploadImageToStorage(base64DataWithPrefix);
-      
-      gameOverData.value = {
-        word: result.detected_word,
-        reading: result.reading,
-        comment: result.comment,
-        image: uploadedUrl
-      }
-      chatData.value = { text: '「ん」がついちゃったね…💀 ゲームオーバー！', image: null }
-      currentState.value = 'gameover'
-      
-      const payload = {
-        room_id: roomId.value,
-        player_id: playerId.value,
-        detected_word: result.detected_word,
-        reading: result.reading,
-        next_char: result.next_char,
-        comment: result.comment,
-        image_base64: uploadedUrl
-      }
-      const { error: wError } = await supabase.from('words').insert([payload])
-      if (wError) console.error('Words insert error:', wError)
-    } else if (result.is_valid) {
-      const expectedTurn = currentTurnIndex.value
-      const turnSuccess = await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), result.next_char)
-      if (!turnSuccess) {
-        currentState.value = 'initial'
-        return
-      }
-
+    if (result.is_valid && !result.is_inappropriate) {
       playSuccess()
       triggerWordAnimation(result.detected_word, result.reading)
       latestMyWord.value = result.detected_word
-      
-      let uploadedUrl = null;
-      if (roomShareEnabled.value) uploadedUrl = await uploadImageToStorage(base64DataWithPrefix);
-
       chatData.value = { text: result.comment, image: uploadedUrl }
-      const payload = {
-        room_id: roomId.value,
-        player_id: playerId.value,
-        detected_word: result.detected_word,
-        reading: result.reading,
-        next_char: result.next_char,
-        comment: result.comment,
-        image_base64: uploadedUrl
-      }
-      const { error: wError } = await supabase.from('words').insert([payload])
-      if (wError) console.error('Words insert error:', wError)
-      
-      turnCount.value++
-      targetLetter.value = result.next_char
       capturedImage.value = null
       if (videoRef.value) videoRef.value.play()
-      currentState.value = 'initial'
     } else {
-      const myPlayerInfo = playersList.value.find(p => p.id === playerId.value)
-      if (myPlayerInfo) {
-        const expectedHp = myPlayerInfo.hp
-        const newHp = Math.max(0, expectedHp - 1)
-        const hpSuccess = await safeUpdatePlayerHp(playerId.value, expectedHp, newHp, roomId.value)
-        if (!hpSuccess) {
-          currentState.value = 'initial'
-          return
-        }
-        
-        playFailure()
-        chatData.value = { text: result.comment, image: null }
-        myPlayerInfo.hp = newHp
-        
-        if (newHp <= 0) {
-          const isOver = await checkWinCondition()
-          if (!isOver) {
-            const expectedTurn = currentTurnIndex.value
-            const turnSuccess = await safeUpdateRoomTurn(roomId.value, expectedTurn, getNextTurnIndex(expectedTurn), targetLetter.value)
-            if (!turnSuccess) {
-              currentState.value = 'initial'
-              return
-            }
-            currentState.value = 'initial'
-          }
-        } else {
-          currentState.value = 'failure'
-        }
-      } else {
-        currentState.value = 'failure'
-      }
+      playFailure()
+      chatData.value = { text: result.comment || '不適切な画像のため弾かれました🚨', image: null }
     }
-  } catch (error) {
-    if (error.name === 'AbortError') {
-      console.warn('API timeout: aborted')
-      chatData.value = { text: 'AIが悩みすぎちゃったみたい🤯 もう一回撮影してみて！', image: null }
-      capturedImage.value = null
-      currentState.value = 'initial'
-      if (videoRef.value) videoRef.value.play()
-    } else {
-      console.error('Fetch error:', error)
-      chatData.value = { text: '通信エラーが発生したみたい💦 もう一回やってみて🙏', image: null }
-      currentState.value = 'failure'
-    }
+    currentState.value = 'initial'
+
+  } catch (err) {
+    console.error('Action error:', err)
+    chatData.value = { text: 'エラーが発生しました💦 もう一度試してね！', image: null }
+    currentState.value = 'initial'
+    capturedImage.value = null
+    if (videoRef.value) videoRef.value.play()
   } finally {
     if (currentState.value !== 'gameover' && currentState.value !== 'clear') {
       isProcessingGameOver.value = false

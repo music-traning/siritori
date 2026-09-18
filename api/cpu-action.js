@@ -8,9 +8,9 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
   try {
-    const { lastChar, rule, difficulty, usedWords, roomId } = req.body;
+    const { lastChar, rule, difficulty, usedWords, roomId, playerId, currentTurnIndex } = req.body;
     if (!lastChar) return res.status(400).json({ error: 'Missing lastChar' });
-    if (!roomId) return res.status(403).json({ error: 'Forbidden: Missing roomId' });
+    if (!roomId || !playerId) return res.status(403).json({ error: 'Forbidden: Missing roomId or playerId' });
 
     // 部屋の存在とステータス検証 (野良APIリクエスト防止)
     const { data: room, error: roomError } = await supabase
@@ -84,6 +84,55 @@ export default async function handler(req, res) {
       result.reading = 'しすてむえらーん';
       result.next_char = 'ん';
       result.comment = `う〜ん、『${lastChar}』から始まる言葉がどうしても思いつかないや…降参するね🤖💦`;
+    }
+
+    // ----------------------------------------------------
+    // バックエンド側でのゲームロジック進行 (DB書き込み)
+    // ----------------------------------------------------
+    const { data: players } = await supabase.from('players').select('*').eq('room_id', roomId).order('order_index', { ascending: true });
+    
+    const getNextTurnIndex = (currentIndex) => {
+      if (!players) return currentIndex + 1;
+      const numPlayers = players.length;
+      if (numPlayers === 0) return currentIndex + 1;
+      let nextIndex = currentIndex + 1;
+      for(let i=0; i<numPlayers; i++) {
+        const p = players[nextIndex % numPlayers];
+        if (p && p.hp > 0) return nextIndex;
+        nextIndex++;
+      }
+      return nextIndex;
+    };
+
+    const isNGameOver = result.next_char === 'ん' || result.reading?.endsWith('ん');
+
+    if (isNGameOver) {
+      // 「ん」で終わった場合: ゲームオーバー
+      await supabase.from('rooms').update({ status: 'gameover' }).eq('id', roomId);
+      await supabase.from('words').insert([{
+        room_id: roomId,
+        player_id: playerId,
+        detected_word: result.detected_word,
+        reading: result.reading,
+        next_char: result.next_char,
+        comment: result.comment,
+        image_base64: null
+      }]);
+    } else {
+      // 正解: 単語を登録してターンを進行
+      await supabase.from('words').insert([{
+        room_id: roomId,
+        player_id: playerId,
+        detected_word: result.detected_word,
+        reading: result.reading,
+        next_char: result.next_char,
+        comment: result.comment,
+        image_base64: null
+      }]);
+      await supabase.from('rooms').update({
+        current_turn_index: getNextTurnIndex(currentTurnIndex),
+        current_char: result.next_char
+      }).eq('id', roomId);
     }
 
     return res.status(200).json(result);
