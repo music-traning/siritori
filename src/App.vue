@@ -1471,13 +1471,15 @@ const goBackToTop = async () => {
         <h1 class="text-4xl text-slate-800 drop-shadow-sm tracking-wide text-center leading-tight">
           繝ｬ繝ｳ繧ｺ縺励ｊ縺ｨ繧・br><span class="text-cyan-500 text-5xl">繧ｪ繝ｳ繝ｩ繧､繝ｳ</span>
         </h1>
-              <!-- オンライン人数バッジ（確実に表示させるための配置） -->
-      <div class="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full shadow-sm border border-slate-200 mt-2 mb-6 mx-auto animate-fade-in">
-        <span class="relative flex h-3 w-3">
-          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-          <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
-        </span>
-        <span class="text-sm font-bold text-slate-700">現在のオンライン: {{ onlineCount }}人</span>
+                    <!-- オンライン人数バッジ -->
+      <div class="flex justify-center w-full mb-6 mt-2">
+        <div class="inline-flex items-center gap-2 bg-white/90 backdrop-blur-sm px-5 py-2 rounded-full shadow-md border border-slate-200">
+          <span class="relative flex h-3 w-3">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+          </span>
+          <span class="text-sm font-bold text-slate-700 tracking-wide">現在のオンライン: {{ onlineCount }}人</span>
+        </div>
       </div>
         <p class="text-slate-600 text-center text-sm">AI縺ｨ荳邱偵↓縲√∩繧薙↑縺ｧ蜀咏悄縺励ｊ縺ｨ繧奇ｼ・/p>
         
