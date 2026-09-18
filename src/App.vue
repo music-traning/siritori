@@ -21,7 +21,7 @@ const reportTarget = ref(null)
 const showCameraWarning = ref(false)
 
 // Global State
-const currentMode = ref('rule-create') // 'rule-create', 'join', 'lobby', 'play', 'history'
+const currentMode = ref('join') // 'rule-create', 'join', 'lobby', 'play', 'history'
 const roomId = ref(null)
 const roomStatus = ref('waiting')
 const hostId = ref(null)
@@ -224,14 +224,14 @@ onMounted(async () => {
         alert('部屋に復帰できませんでした（退出済みか満室です）💦')
         roomId.value = null
         window.history.replaceState({}, '', '/')
-        currentMode.value = 'rule-create'
+        currentMode.value = 'join'
       }
     } else {
       currentMode.value = 'join'
     }
     isRecovering.value = false
   } else {
-    currentMode.value = 'rule-create'
+    currentMode.value = 'join'
   }
   
   window.addEventListener('beforeunload', handleBeforeUnload)
@@ -1608,7 +1608,7 @@ const goBackToTop = async () => {
             @click="skipRule"
             class="w-full py-3 mt-2 rounded-2xl text-lg text-slate-500 bg-transparent hover:bg-slate-100 transition-all font-bold underline"
           >
-            ルールなしで普通に遊ぶ
+            トップ画面に戻る 🔙
           </button>
         </div>
       </div>
@@ -1685,6 +1685,14 @@ const goBackToTop = async () => {
               </span>
             </label>
           </div>
+
+          <button 
+            v-if="!roomId"
+            @click="currentMode = 'rule-create'"
+            class="w-full py-4 mt-4 rounded-2xl text-xl text-white bg-purple-500 hover:bg-purple-400 shadow-[0_6px_0_0_#9333ea] transition-all duration-150 active:translate-y-[6px] active:shadow-none"
+          >
+            特別ルールを作成する✨
+          </button>
 
           <button 
             v-if="!roomId"
