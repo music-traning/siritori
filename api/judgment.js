@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, HarmCategory, HarmBlockThreshold } from '@google/genai';
 import { createClient } from '@supabase/supabase-js';
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
@@ -8,7 +8,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   
   try {
-    const { imageBase64, lastChar, rule, turnCount, difficulty, roomId, playerId, currentTurnIndex, uploadedUrl } = req.body;
+    const { imageBase64, lastChar, rule, turnCount, difficulty, roomId, playerId, currentTurnIndex } = req.body;
     if (!imageBase64 || !lastChar) return res.status(400).json({ error: 'Missing imageBase64 or lastChar' });
     if (!roomId || !playerId) return res.status(403).json({ error: 'Forbidden: Missing roomId or playerId' });
 
@@ -57,35 +57,53 @@ export default async function handler(req, res) {
 - 特別ルール違反時の失敗例: 「『〇〇』いい感じ！…なんだけど、今回の特別ルールには合ってないみたい🥺 別のものを探してみよう！」
 `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.5-flash-lite',
-      contents: [
-        systemPrompt,
-        {
-          inlineData: {
-            mimeType: "image/jpeg",
-            data: imageBase64.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "")
+    let result;
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.5-flash-lite',
+        contents: [
+          systemPrompt,
+          {
+            inlineData: {
+              mimeType: "image/jpeg",
+              data: imageBase64.replace(/^data:image\/(png|jpeg|jpg|webp);base64,/, "")
+            }
           }
-        }
-      ],
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            is_valid: { type: Type.BOOLEAN, description: "しりとりのルールおよび特別ルールを全て満たしているか" },
-            detected_word: { type: Type.STRING, description: "画像から判定された単語" },
-            reading: { type: Type.STRING, description: "単語のひらがな読み" },
-            next_char: { type: Type.STRING, description: "次の人に渡す文字（最後の文字。「ん」や小文字の場合は適切に処理）" },
-            comment: { type: Type.STRING, description: "判定理由やプレイヤーへの短いコメント" },
-            is_inappropriate: { type: Type.BOOLEAN, description: "不適切な画像(NSFW等)かどうか" }
+        ],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              is_valid: { type: Type.BOOLEAN, description: "しりとりのルールおよび特別ルールを全て満たしているか" },
+              detected_word: { type: Type.STRING, description: "画像から判定された単語" },
+              reading: { type: Type.STRING, description: "単語のひらがな読み" },
+              next_char: { type: Type.STRING, description: "次の人に渡す文字（最後の文字。「ん」や小文字の場合は適切に処理）" },
+              comment: { type: Type.STRING, description: "判定理由やプレイヤーへの短いコメント" },
+              is_inappropriate: { type: Type.BOOLEAN, description: "不適切な画像(NSFW等)かどうか" }
+            },
+            required: ["is_valid", "detected_word", "reading", "next_char", "comment", "is_inappropriate"]
           },
-          required: ["is_valid", "detected_word", "reading", "next_char", "comment", "is_inappropriate"]
+          safetySettings: [
+            { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE },
+            { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE },
+            { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE },
+            { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_LOW_AND_ABOVE }
+          ]
         }
-      }
-    });
-
-    const result = JSON.parse(response.text);
+      });
+      result = JSON.parse(response.text);
+    } catch (error) {
+      console.error("AI Safety or Parse Error:", error);
+      result = {
+        is_valid: false,
+        detected_word: '判定不可',
+        reading: 'はんていふか',
+        next_char: lastChar,
+        comment: '不適切な画像、またはAIが判定できない画像です🚨',
+        is_inappropriate: true
+      };
+    }
     
     // 強制検算ロジック: AIのハルシネーション対策
     if (result.reading && result.reading.charAt(0) !== lastChar) {
@@ -169,14 +187,14 @@ export default async function handler(req, res) {
             current_turn_index: getNextTurnIndex(currentTurnIndex)
           }).eq('id', roomId);
           await supabase.from('words').insert([{
-            room_id: roomId, player_id: playerId, detected_word: result.detected_word, reading: result.reading, next_char: result.next_char, comment: result.comment, image_base64: uploadedUrl || null
+            room_id: roomId, player_id: playerId, detected_word: result.detected_word, reading: result.reading, next_char: result.next_char, comment: result.comment, image_base64: null
           }]);
         }
       }
     } else if (result.is_valid) {
       // 正解: 単語を挿入し、ターンを進める
       await supabase.from('words').insert([{
-        room_id: roomId, player_id: playerId, detected_word: result.detected_word, reading: result.reading, next_char: result.next_char, comment: result.comment, image_base64: uploadedUrl || null
+        room_id: roomId, player_id: playerId, detected_word: result.detected_word, reading: result.reading, next_char: result.next_char, comment: result.comment, image_base64: null
       }]);
       await supabase.from('rooms').update({
         current_turn_index: getNextTurnIndex(currentTurnIndex),

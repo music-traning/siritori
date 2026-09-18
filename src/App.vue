@@ -842,7 +842,7 @@ const setupRealtimeSubscription = (id) => {
         if (videoRef.value) videoRef.value.play()
         else startCamera()
       }
-    } else if (room.status === 'gameover' && !isProcessingGameOver.value) {
+    } else if ((room.status === 'gameover' || room.status === 'clear') && !isProcessingGameOver.value) {
       isProcessingGameOver.value = true
       const { data: lastWord } = await supabase.from('words').select('*').eq('room_id', id).order('created_at', { ascending: false }).limit(1).single()
       if (lastWord) {
@@ -852,7 +852,7 @@ const setupRealtimeSubscription = (id) => {
           comment: lastWord.comment,
           image: lastWord.image_base64
         }
-        if (lastWord.detected_word === '引き分け' || lastWord.detected_word === '優勝') {
+        if (lastWord.detected_word === '優勝') {
           playSuccess()
         } else {
           playGameOver()
@@ -860,7 +860,7 @@ const setupRealtimeSubscription = (id) => {
       } else {
         playGameOver()
       }
-      currentState.value = 'gameover'
+      currentState.value = room.status
     }
 
     currentTurnIndex.value = room.current_turn_index
@@ -1116,11 +1116,6 @@ const handleAction = async () => {
       forbidden_elements: currentRule.value?.forbidden_elements || '特になし'
     }
 
-    let uploadedUrl = null;
-    if (roomShareEnabled.value) {
-      uploadedUrl = await uploadImageToStorage(base64DataWithPrefix);
-    }
-
     const response = await fetch('/api/judgment', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1132,8 +1127,7 @@ const handleAction = async () => {
         difficulty: roomDifficulty.value,
         roomId: roomId.value,
         playerId: playerId.value,
-        currentTurnIndex: currentTurnIndex.value,
-        uploadedUrl: uploadedUrl
+        currentTurnIndex: currentTurnIndex.value
       }),
       signal: controller.signal
     })
@@ -1147,7 +1141,7 @@ const handleAction = async () => {
       playSuccess()
       triggerWordAnimation(result.detected_word, result.reading)
       latestMyWord.value = result.detected_word
-      chatData.value = { text: result.comment, image: uploadedUrl }
+      chatData.value = { text: result.comment, image: null }
       capturedImage.value = null
       if (videoRef.value) videoRef.value.play()
     } else {
