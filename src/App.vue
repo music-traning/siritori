@@ -1227,17 +1227,23 @@ const handleAction = async () => {
       chatData.value = { text: result.comment, image: null }
       capturedImage.value = null
       if (videoRef.value) videoRef.value.play()
-      currentState.value = 'initial'
+      if (currentState.value !== 'gameover' && currentState.value !== 'clear') {
+        currentState.value = 'initial'
+      }
     } else {
       playFailure()
       chatData.value = { text: result.comment || '不適切な画像のため弾かれました🚨', image: null }
-      currentState.value = 'failure'
+      if (currentState.value !== 'gameover' && currentState.value !== 'clear') {
+        currentState.value = 'failure'
+      }
     }
 
   } catch (err) {
     console.error('Action error:', err)
     chatData.value = { text: 'エラーが発生しました💦 もう一度試してね！', image: null }
-    currentState.value = 'initial'
+    if (currentState.value !== 'gameover' && currentState.value !== 'clear') {
+      currentState.value = 'initial'
+    }
     capturedImage.value = null
     if (videoRef.value) videoRef.value.play()
   } finally {
@@ -1274,7 +1280,9 @@ const passMyTurn = async () => {
     console.error('Pass error:', error)
     chatData.value = { text: 'パスに失敗しました💦', image: null }
   } finally {
-    currentState.value = 'initial'
+    if (currentState.value !== 'gameover' && currentState.value !== 'clear') {
+      currentState.value = 'initial'
+    }
   }
 }
 
