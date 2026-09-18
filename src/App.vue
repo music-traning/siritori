@@ -893,10 +893,21 @@ const setupRealtimeSubscription = (id) => {
   const roomChannel = supabase.channel(`rooms-${id}`).on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${id}` }, async (payload) => {
     const room = payload.new
     
+    // 部屋全体のステータスを変数に常に同期させる
+    roomStatus.value = room.status;
+
     // 無条件でステータスを即座に同期（ドクロ画面で止まるバグの修正）
     if (room.status === 'clear' || room.status === 'gameover') {
       currentState.value = room.status
       isJudging.value = false
+    }
+
+    // ★新規追加：ホストが再戦ボタンを押して部屋が waiting に戻った時、全員を強制的にロビーへ戻す
+    if (room.status === 'waiting') {
+      currentMode.value = 'lobby';
+      currentState.value = 'waiting';
+      isProcessingGameOver.value = false;
+      hasPlayedGameOverSound.value = false;
     }
 
     if (room.status === 'playing') {
