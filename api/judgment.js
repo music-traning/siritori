@@ -40,6 +40,8 @@ export default async function handler(req, res) {
       systemPrompt += `4. NG条件(存在してはいけない): ${rule.forbidden_elements}\n`;
     }
 
+    systemPrompt += `5. 【不正検知ルール(最優先)】: 画像が「別のスマートフォン、PCモニター、タブレット、テレビなどのデジタル画面を撮影したもの」であると判断できる場合（モアレ現象、ピクセルの網目、画面の反射光、デバイスの枠などが確認できる場合）、被写体が他の条件を全て満たしていても絶対に is_valid: false としてください。その際の comment は必ず「画面を写しちゃダメだよ！実物を探してね🙅‍♀️」としてください。\n`;
+
     systemPrompt += `\n【難易度に応じた判定方針】\n`;
     if (difficulty === 'easy') {
       systemPrompt += `判定基準を寛容にし、少しでも条件に掠っていれば正解とする。子供と遊ぶように優しく。\n`;
