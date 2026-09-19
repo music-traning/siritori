@@ -51,53 +51,66 @@ export default async function handler(req) {
       return new Response(JSON.stringify({ error: 'Forbidden: Not your turn' }), { status: 403 });
     }
 
-    let difficultyInstruction = '';
+    let prompt = '';
+
     if (difficulty === 'comedy') {
-      difficultyInstruction = 'あなたはコテコテの関西弁を話すベテラン漫才師です。写真に写っている物体が何であれ、100%の確率で指定の文字から始まる名前に強引にこじつけてください（ボケ）。そして、その直後に必ず自分で『って、なんでやねん！ただの〇〇（本来の物体の名前）やないかい！』『無理あるわ！』などと激しくノリツッコミを入れて、笑いを取りにいってください。判定は必ず『正解』にします。';
-    } else if (difficulty === 'easy') {
-      difficultyInstruction = 'あなたは『お笑いこじつけ審査員』です。写真に写っているものが何であれ、80%の確率で指定の文字から始まる名前に強引にこじつけて『正解』にしてください。（例: 犬の写真で「あ」なら「あっ！犬だ」「あかい首輪」など）。笑える言い訳をコメントに書いてください。ただし、最初と最後の文字のルールだけは絶対に厳守すること。';
-    } else if (difficulty === 'normal') {
-      difficultyInstruction = '50%の確率で、対象物を指定の文字から始まる名前に強引にこじつけて正解にしてください（お笑い要素）。残りの50%は通常の妥当な判定を行ってください。';
-    } else if (difficulty === 'hard') {
-      difficultyInstruction = '10%の確率で強引なこじつけで正解にします。残りの90%は厳密に判定してください。';
-    } else if (difficulty === 'expert') {
-      difficultyInstruction = 'あなたは『極めて厳格な審査員』です。写真に明確に写っているもの以外は一切認めません。一切の強引なこじつけ、ダジャレ、言い訳を許さず、少しでもズレていれば容赦なく『不正解』にしてください。マジモノのしりとりを行います。';
-    } else {
-      difficultyInstruction = '一般的なしりとりの基準で判定すること。';
-    }
-    
-    let prompt = `あなたはプレイヤーと一緒にしりとりで遊んでいるフレンドリーなAIバディです。\n【難易度に応じた方針（これに沿って生成する単語のこじつけ度合いを調整してください）】\n${difficultyInstruction}\n\n`;
-    prompt += `
-以下の【厳格なルール】に従って、単語を1つ生成してください。
-
-【厳格なルール】
-1. 単語のひらがな読みの最初の1文字が「${lastChar}」と完全に一致する単語を絶対に選んでください（濁点・半濁点も厳密に区別すること。言い訳をして別の文字から始めるのは固く禁じます）。
+      // お笑いモード専用プロンプト（真面目なバディ設定を完全排除）
+      prompt = `あなたはコテコテの関西弁を話すベテラン漫才師です。今回は「${lastChar}」から始まる言葉を探すしりとりゲームです。
+【絶対ルール】
+1. 単語のひらがな読みの最初の1文字が「${lastChar}」と完全に一致する単語を絶対に選んでください（濁点・半濁点も厳密に区別すること）。
+2. 普通の単語ではなく、「指定の文字から始まる、絶対に実在しない架空のトンデモアイテムや理不尽な状況」を勝手に捏造して回答してください（大ボケ）。
+3. そして comment には、必ず自分で『って、なんでやねん！そんなもんあるかい！』『無理あるわ！』などと激しくセルフツッコミを入れて、爆笑を取ってください。親友のような優しいトーンは禁止です。
 `;
-    if (rule && rule.theme_condition) {
-      prompt += `2. 特別ルール(必須条件): ${rule.theme_condition}\n`;
-    }
-    if (rule && rule.forbidden_elements) {
-      prompt += `3. NG条件(存在してはいけない): ${rule.forbidden_elements}\n`;
-    }
-    if (usedWords && usedWords.length > 0) {
-      prompt += `4. 以下の単語はすでに使用済みのため、絶対に回答してはならない: ${usedWords.join(', ')}\n`;
-    }
-    
-    prompt += `\n【難易度に応じた単語選び】\n`;
-    if (difficulty === 'easy') {
-      prompt += `子供でも知っている簡単な単語を選ぶこと。\n`;
-    } else if (difficulty === 'hard') {
-      prompt += `大人でも思いつきにくい、少しマニアックで長い単語を選ぶこと。AIの語彙力を見せつけること。\n`;
-    } else {
-      prompt += `一般的なしりとりで使われる普通の単語を選ぶこと。\n`;
-    }
+      if (rule && rule.theme_condition) prompt += `4. 特別ルール(必須条件): ${rule.theme_condition}\n`;
+      if (rule && rule.forbidden_elements) prompt += `5. NG条件(存在してはいけない): ${rule.forbidden_elements}\n`;
+      if (usedWords && usedWords.length > 0) prompt += `6. 以下の単語は使用済みのため絶対禁止: ${usedWords.join(', ')}\n`;
 
-    prompt += `
-【ユーザーへのコメント(comment)のガイドライン】
+      prompt += `
+例: お題「る」の場合
+detected_word: 「ルビーで装飾された伝説の便器」
+reading: 「るびーでそうしょくされたでんせつのべんき」
+next_char: 「き」
+comment: 「『ルビーで装飾された伝説の便器』やな！……って、なんでやねん！そんなもん誰が使うねん！『る』から始まるもん思いつかんからって適当すぎるやろ！」
+
+単語を一つ選び、指定されたJSON形式で返答してください。`;
+
+    } else {
+      // 通常のプロンプト構築ロジック
+      let difficultyInstruction = '';
+      if (difficulty === 'easy') {
+        difficultyInstruction = 'あなたは『お笑いこじつけ審査員』です。写真に写っているものが何であれ、80%の確率で指定の文字から始まる名前に強引にこじつけて『正解』にしてください。（例: 犬の写真で「あ」なら「あっ！犬だ」「あかい首輪」など）。笑える言い訳をコメントに書いてください。ただし、最初と最後の文字のルールだけは絶対に厳守すること。';
+      } else if (difficulty === 'normal') {
+        difficultyInstruction = '50%の確率で、対象物を指定の文字から始まる名前に強引にこじつけて正解にしてください（お笑い要素）。残りの50%は通常の妥当な判定を行ってください。';
+      } else if (difficulty === 'hard') {
+        difficultyInstruction = '10%の確率で強引なこじつけで正解にします。残りの90%は厳密に判定してください。';
+      } else if (difficulty === 'expert') {
+        difficultyInstruction = 'あなたは『極めて厳格な審査員』です。写真に明確に写っているもの以外は一切認めません。一切の強引なこじつけ、ダジャレ、言い訳を許さず、少しでもズレていれば容赦なく『不正解』にしてください。マジモノのしりとりを行います。';
+      } else {
+        difficultyInstruction = '一般的なしりとりの基準で判定すること。';
+      }
+      
+      prompt = `あなたはプレイヤーと一緒にしりとりで遊んでいるフレンドリーなAIバディです。\n【難易度に応じた方針（これに沿って生成する単語のこじつけ度合いを調整してください）】\n${difficultyInstruction}\n\n`;
+      prompt += `以下の【厳格なルール】に従って、単語を1つ生成してください。\n\n【厳格なルール】\n1. 単語のひらがな読みの最初の1文字が「${lastChar}」と完全に一致する単語を絶対に選んでください（濁点・半濁点も厳密に区別すること。言い訳をして別の文字から始めるのは固く禁じます）。\n`;
+      
+      if (rule && rule.theme_condition) prompt += `2. 特別ルール(必須条件): ${rule.theme_condition}\n`;
+      if (rule && rule.forbidden_elements) prompt += `3. NG条件(存在してはいけない): ${rule.forbidden_elements}\n`;
+      if (usedWords && usedWords.length > 0) prompt += `4. 以下の単語はすでに使用済みのため、絶対に回答してはならない: ${usedWords.join(', ')}\n`;
+      
+      prompt += `\n【難易度に応じた単語選び】\n`;
+      if (difficulty === 'easy') {
+        prompt += `子供でも知っている簡単な単語を選ぶこと。\n`;
+      } else if (difficulty === 'hard') {
+        prompt += `大人でも思いつきにくい、少しマニアックで長い単語を選ぶこと。AIの語彙力を見せつけること。\n`;
+      } else {
+        prompt += `一般的なしりとりで使われる普通の単語を選ぶこと。\n`;
+      }
+
+      prompt += `\n【ユーザーへのコメント(comment)のガイドライン】
 思考プロセスや言い訳をコメントに出力してごまかすことは固く禁じます。単語の選定ロジックは厳格に行いますが、出力する comment は、一緒に遊んでいる親しみやすいAIバディとしてのセリフにしてください。
 - 成功時の例: 「『${lastChar}』だね！じゃあ『〇〇』はどうかな？ 小さくて探すの大変だけどね🤭 次は『〇（最後の文字）』だよ！」
 - 条件が厳しすぎて見つからず、「ん」で終わる単語で自爆する場合の例: 「う〜ん、『${lastChar}』から始まってその条件を満たすもの…あっ、『〇〇ん』しか思いつかない！負けちゃった〜🤖💦」
 単語を一つ選び、指定されたJSON形式で返答してください。`;
+    }
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.5-flash-lite',
