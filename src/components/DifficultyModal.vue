@@ -14,6 +14,11 @@ defineEmits(['close'])
       <p class="text-sm text-slate-600 mb-6 text-center font-bold">AI審査員の「強引なこじつけ度」が変わります！</p>
       
       <div class="space-y-4">
+        <div class="bg-blue-50 border-2 border-blue-200 p-3 rounded-2xl">
+          <p class="font-black text-blue-700 text-lg mb-1">お笑い 🎙️ <span class="text-sm text-blue-600">(こじつけ度: 測定不能)</span></p>
+          <p class="text-xs text-slate-700 font-bold leading-relaxed">AIがコテコテの大阪弁漫才師になりきり、無理やりなこじつけ（ボケ）と激しいノリツッコミを披露します。ルール無用の爆笑モードです！</p>
+        </div>
+        
         <div class="bg-green-50 border-2 border-green-200 p-3 rounded-2xl">
           <p class="font-black text-green-700 text-lg mb-1">初級 🔰 <span class="text-sm text-green-600">(こじつけ度: 80%)</span></p>
           <p class="text-xs text-slate-700 font-bold leading-relaxed">AIのお笑いモード！写真が何であれ、指定の文字に無理やりこじつけて正解にしてくれます。</p>
