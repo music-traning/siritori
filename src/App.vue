@@ -920,6 +920,7 @@ const setupRealtimeSubscription = (id) => {
     if (room.status === 'playing') {
       if (currentMode.value === 'lobby') {
         currentMode.value = 'play'
+        currentState.value = 'initial'
         startCamera()
       } else if (currentState.value === 'gameover' || currentState.value === 'clear') {
         currentMode.value = 'play'
@@ -1422,7 +1423,7 @@ const goBackToTop = async () => {
   </div>
   <div v-if="!isAdminMode"
     class="w-full bg-pink-50 flex flex-col items-center p-3 font-bold max-w-md mx-auto relative"
-    :class="currentMode === 'play' ? 'h-[100dvh] overflow-y-auto' : 'min-h-[100dvh] pt-8 pb-12'"
+    :class="currentMode === 'play' ? 'h-[100svh] overflow-hidden' : 'min-h-[100svh] pt-8 pb-12'"
   >
     <!-- Decorative background elements -->
     <div class="absolute top-[-50px] left-[-50px] w-32 h-32 bg-yellow-300 rounded-full mix-blend-multiply filter blur-xl opacity-70 animate-blob pointer-events-none z-0"></div>

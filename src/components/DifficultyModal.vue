@@ -15,7 +15,7 @@ defineEmits(['close'])
       
       <div class="space-y-4">
         <div class="bg-green-50 border-2 border-green-200 p-3 rounded-2xl">
-          <p class="font-black text-green-700 text-lg mb-1">初級 🔰 <span class="text-sm text-green-600">(こじつけ度: 100%)</span></p>
+          <p class="font-black text-green-700 text-lg mb-1">初級 🔰 <span class="text-sm text-green-600">(こじつけ度: 80%)</span></p>
           <p class="text-xs text-slate-700 font-bold leading-relaxed">AIのお笑いモード！写真が何であれ、指定の文字に無理やりこじつけて正解にしてくれます。</p>
         </div>
         
