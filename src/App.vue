@@ -74,72 +74,133 @@ const generateShareImage = async (item) => {
     canvas.width = 800
     canvas.height = 1000
 
-    // 背景色（ピンク系）
+    // 角丸描画ヘルパー
+    const drawRoundRect = (ctx, x, y, w, h, r) => {
+      ctx.beginPath()
+      ctx.moveTo(x + r, y)
+      ctx.arcTo(x + w, y, x + w, y + h, r)
+      ctx.arcTo(x + w, y + h, x, y + h, r)
+      ctx.arcTo(x, y + h, x, y, r)
+      ctx.arcTo(x, y, x + w, y, r)
+      ctx.closePath()
+    }
+
+    // 1. 背景（ポップなピンクの水玉模様）
     ctx.fillStyle = '#fdf2f8'
     ctx.fillRect(0, 0, canvas.width, canvas.height)
+    ctx.fillStyle = '#fbcfe8'
+    for (let x = 0; x < canvas.width; x += 40) {
+      for (let y = 0; y < canvas.height; y += 40) {
+        ctx.beginPath()
+        ctx.arc(x + (y % 80 === 0 ? 0 : 20), y, 6, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
 
-    // 装飾枠
+    // 2. メインの白いカード（立体感）
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.15)'
+    ctx.shadowBlur = 20
+    ctx.shadowOffsetY = 10
+    ctx.fillStyle = '#ffffff'
+    drawRoundRect(ctx, 40, 40, 720, 920, 40)
+    ctx.fill()
+    ctx.shadowColor = 'transparent' // シャドウリセット
+    ctx.lineWidth = 8
     ctx.strokeStyle = '#1e293b'
-    ctx.lineWidth = 12
-    ctx.strokeRect(20, 20, canvas.width - 40, canvas.height - 40)
+    ctx.stroke()
 
-    // タイトル・文字
-    ctx.fillStyle = '#1e293b'
+    // 3. タイトル（水色＋縁取り）
     ctx.textAlign = 'center'
-    ctx.font = 'bold 32px sans-serif'
-    ctx.fillText('レンズしりとりオンライン📸', canvas.width / 2, 80)
+    ctx.font = '900 36px sans-serif'
+    ctx.fillStyle = '#06b6d4'
+    ctx.fillText('📸 レンズしりとりオンライン', canvas.width / 2, 110)
+    ctx.lineWidth = 2
+    ctx.strokeText('📸 レンズしりとりオンライン', canvas.width / 2, 110)
 
-    ctx.font = 'bold 24px sans-serif'
-    ctx.fillStyle = '#64748b'
-    ctx.fillText(`【${item.next_char || '？'}】から始まるもの`, canvas.width / 2, 130)
+    // 4. お題のバッジ（ピンク角丸）
+    ctx.fillStyle = '#ec4899'
+    drawRoundRect(ctx, canvas.width / 2 - 200, 150, 400, 60, 30)
+    ctx.fill()
+    ctx.fillStyle = '#ffffff'
+    ctx.font = 'bold 28px sans-serif'
+    ctx.fillText(`次は【 ${item.next_char || '？'} 】から始まるもの！`, canvas.width / 2, 192)
 
-    ctx.font = 'black 64px sans-serif'
-    ctx.fillStyle = '#0891b2'
-    ctx.fillText(item.detected_word, canvas.width / 2, 220)
+    // 5. 回答ワード（ボケ） - YouTuberテロップ風に傾ける
+    ctx.save()
+    ctx.translate(canvas.width / 2, 330)
+    ctx.rotate(-0.05) // 約-3度傾ける
+    ctx.font = '900 64px sans-serif'
+    ctx.lineWidth = 14
+    ctx.strokeStyle = '#1e293b'
+    ctx.lineJoin = 'round'
+    ctx.strokeText(item.detected_word, 0, 0)
+    ctx.fillStyle = '#fef08a' // 派手な黄色
+    ctx.fillText(item.detected_word, 0, 0)
+    
+    if (item.reading) {
+      ctx.font = '900 24px sans-serif'
+      ctx.lineWidth = 8
+      ctx.strokeText(`(${item.reading})`, 0, 50)
+      ctx.fillStyle = '#ffffff'
+      ctx.fillText(`(${item.reading})`, 0, 50)
+    }
+    ctx.restore()
 
-    let currentY = 250;
+    let currentY = 460;
 
-    // 画像の描画（存在する場合）
+    // ※将来的に画像が復活した時用のロジック
     if (item.image_base64) {
       await new Promise((resolve, reject) => {
         const img = new Image()
         img.onload = () => {
-          // アスペクト比を維持して描画（最大枠 600x400）
-          const maxW = 600
-          const maxH = 400
+          const maxW = 560
+          const maxH = 340
           let drawW = img.width
           let drawH = img.height
           if (drawW > maxW) { drawH *= maxW / drawW; drawW = maxW; }
           if (drawH > maxH) { drawW *= maxH / drawH; drawH = maxH; }
-          
           const x = (canvas.width - drawW) / 2
-          const y = currentY + 30
-          
-          ctx.shadowColor = 'rgba(0,0,0,0.2)'
-          ctx.shadowBlur = 15
-          ctx.shadowOffsetY = 5
+          const y = currentY
           ctx.drawImage(img, x, y, drawW, drawH)
-          
-          // 枠線
-          ctx.shadowColor = 'transparent'
           ctx.lineWidth = 6
           ctx.strokeRect(x, y, drawW, drawH)
-          
-          currentY = y + drawH + 20
+          currentY = y + drawH + 50
           resolve()
         }
         img.onerror = reject
         img.src = item.image_base64
       })
-    } else {
-      currentY += 100
     }
 
-    // コメント（AIのツッコミなど）
+    // 6. コメント（ツッコミ） - 漫画の吹き出し風
+    ctx.fillStyle = '#f1f5f9'
+    drawRoundRect(ctx, 70, currentY, 660, 420, 30)
+    ctx.fill()
+    ctx.lineWidth = 6
+    ctx.strokeStyle = '#1e293b'
+    ctx.stroke()
+    
+    // 吹き出しのしっぽ（上向き）
+    ctx.beginPath()
+    ctx.moveTo(canvas.width / 2 - 20, currentY)
+    ctx.lineTo(canvas.width / 2 + 10, currentY - 30)
+    ctx.lineTo(canvas.width / 2 + 40, currentY)
+    ctx.fillStyle = '#f1f5f9'
+    ctx.fill()
+    ctx.stroke()
+    // 枠線の重なりを消す
+    ctx.beginPath()
+    ctx.moveTo(canvas.width / 2 - 17, currentY)
+    ctx.lineTo(canvas.width / 2 + 37, currentY)
+    ctx.strokeStyle = '#f1f5f9'
+    ctx.lineWidth = 8
+    ctx.stroke()
+
+    // ツッコミテキスト
     ctx.fillStyle = '#1e293b'
     ctx.textAlign = 'left'
-    ctx.font = 'bold 32px sans-serif'
-    wrapText(ctx, item.comment || '', 100, currentY + 60, 600, 45)
+    ctx.font = 'bold 30px sans-serif' // 長文も入りやすいように少しサイズ調整
+    wrapText(ctx, item.comment || '', 110, currentY + 60, 580, 45)
 
     shareImageUrl.value = canvas.toDataURL('image/jpeg', 0.8)
     shareText.value = `AIの判定結果:『${item.detected_word}』\n#レンズしりとりオンライン\n${window.location.origin}`
