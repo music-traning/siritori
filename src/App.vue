@@ -1781,7 +1781,7 @@ const goBackToTop = async () => {
           </template>
           
           <template v-else>
-            <div v-if="(playersList.find(p => p.id === playerId)?.hp || 0) <= 0 && currentState !== 'gameover' && currentState !== 'clear'" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center z-[15] p-4 text-center backdrop-blur-sm">
+            <div v-if="(myPlayer?.hp || 0) <= 0 && currentState !== 'gameover' && currentState !== 'clear'" class="absolute inset-0 bg-slate-900/90 flex flex-col items-center justify-center z-[15] p-4 text-center backdrop-blur-sm">
               <div class="text-6xl mb-4">💀</div>
               <p class="text-white text-2xl font-black mb-2 text-red-400">あなたは脱落しました...</p>
               <p class="text-slate-300 text-sm mb-8">他のプレイヤーの観戦中 👀</p>
@@ -1806,7 +1806,7 @@ const goBackToTop = async () => {
             />
 
             <!-- Not my turn overlay -->
-            <div v-if="!isMyTurn && currentState !== 'processing' && (playersList.find(p => p.id === playerId)?.hp || 0) > 0" class="absolute inset-0 bg-slate-800/80 flex flex-col items-center justify-center z-10 p-4">
+            <div v-if="!isMyTurn && currentState !== 'processing' && (myPlayer?.hp || 0) > 0" class="absolute inset-0 bg-slate-800/80 flex flex-col items-center justify-center z-10 p-4">
               <div class="w-16 h-16 mb-4 rounded-full bg-cyan-400 border-2 border-white flex items-center justify-center text-3xl animate-bounce">👀</div>
               <p class="text-white text-lg">{{ activePlayer?.name }} の判定待ち...</p>
             </div>
@@ -1869,7 +1869,7 @@ const goBackToTop = async () => {
         </template>
         
         <template v-else>
-          <div v-if="(playersList.find(p => p.id === playerId)?.hp || 0) > 0" class="flex flex-col gap-2 w-full">
+          <div v-if="(myPlayer?.hp || 0) > 0" class="flex flex-col gap-2 w-full">
             <button 
               v-if="currentState === 'initial' || currentState === 'processing'"
               @click="handleAction"
