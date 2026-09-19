@@ -117,7 +117,7 @@ const canvasRef = ref(null)
 const stream = ref(null)
 const capturedImage = ref(null)
 
-const hiraganaList = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわを".split('')
+const hiraganaList = "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわ".split('')
 
 // Computed
 const activePlayer = computed(() => {
