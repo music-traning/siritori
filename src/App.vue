@@ -41,6 +41,121 @@ const checkAdminPassword = async () => {
 
 const showRulesModal = ref(false)
 const showDifficultyModal = ref(false)
+
+const showShareModal = ref(false)
+const shareImageUrl = ref(null)
+const isGeneratingImage = ref(false)
+const shareText = ref('')
+
+const wrapText = (ctx, text, x, y, maxWidth, lineHeight) => {
+  const words = text.split('');
+  let line = '';
+  for(let n = 0; n < words.length; n++) {
+    const testLine = line + words[n];
+    const metrics = ctx.measureText(testLine);
+    const testWidth = metrics.width;
+    if (testWidth > maxWidth && n > 0) {
+      ctx.fillText(line, x, y);
+      line = words[n];
+      y += lineHeight;
+    } else {
+      line = testLine;
+    }
+  }
+  ctx.fillText(line, x, y);
+  return y + lineHeight;
+}
+
+const generateShareImage = async (item) => {
+  isGeneratingImage.value = true
+  try {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    canvas.width = 800
+    canvas.height = 1000
+
+    // 背景色（ピンク系）
+    ctx.fillStyle = '#fdf2f8'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+    // 装飾枠
+    ctx.strokeStyle = '#1e293b'
+    ctx.lineWidth = 12
+    ctx.strokeRect(20, 20, canvas.width - 40, canvas.height - 40)
+
+    // タイトル・文字
+    ctx.fillStyle = '#1e293b'
+    ctx.textAlign = 'center'
+    ctx.font = 'bold 32px sans-serif'
+    ctx.fillText('レンズしりとりオンライン📸', canvas.width / 2, 80)
+
+    ctx.font = 'bold 24px sans-serif'
+    ctx.fillStyle = '#64748b'
+    ctx.fillText(`【${item.next_char || '？'}】から始まるもの`, canvas.width / 2, 130)
+
+    ctx.font = 'black 64px sans-serif'
+    ctx.fillStyle = '#0891b2'
+    ctx.fillText(item.detected_word, canvas.width / 2, 220)
+
+    let currentY = 250;
+
+    // 画像の描画（存在する場合）
+    if (item.image_base64) {
+      await new Promise((resolve, reject) => {
+        const img = new Image()
+        img.onload = () => {
+          // アスペクト比を維持して描画（最大枠 600x400）
+          const maxW = 600
+          const maxH = 400
+          let drawW = img.width
+          let drawH = img.height
+          if (drawW > maxW) { drawH *= maxW / drawW; drawW = maxW; }
+          if (drawH > maxH) { drawW *= maxH / drawH; drawH = maxH; }
+          
+          const x = (canvas.width - drawW) / 2
+          const y = currentY + 30
+          
+          ctx.shadowColor = 'rgba(0,0,0,0.2)'
+          ctx.shadowBlur = 15
+          ctx.shadowOffsetY = 5
+          ctx.drawImage(img, x, y, drawW, drawH)
+          
+          // 枠線
+          ctx.shadowColor = 'transparent'
+          ctx.lineWidth = 6
+          ctx.strokeRect(x, y, drawW, drawH)
+          
+          currentY = y + drawH + 20
+          resolve()
+        }
+        img.onerror = reject
+        img.src = item.image_base64
+      })
+    } else {
+      currentY += 100
+    }
+
+    // コメント（AIのツッコミなど）
+    ctx.fillStyle = '#1e293b'
+    ctx.textAlign = 'left'
+    ctx.font = 'bold 32px sans-serif'
+    wrapText(ctx, item.comment || '', 100, currentY + 60, 600, 45)
+
+    shareImageUrl.value = canvas.toDataURL('image/jpeg', 0.8)
+    shareText.value = `AIの判定結果:『${item.detected_word}』\n#レンズしりとりオンライン\n${window.location.origin}`
+    showShareModal.value = true
+  } catch (error) {
+    console.error('Image generation failed:', error)
+    alert('画像の生成に失敗しました💦')
+  } finally {
+    isGeneratingImage.value = false
+  }
+}
+
+const shareToX = () => {
+  const encodedText = encodeURIComponent(shareText.value)
+  window.open(`https://x.com/intent/tweet?text=${encodedText}`, '_blank')
+}
 const showHowToPlayModal = ref(false)
 const showPrivacyPolicyModal = ref(false)
 const showReportModal = ref(false)
@@ -1721,7 +1836,14 @@ const goBackToTop = async () => {
                 <p class="text-xs text-slate-600 line-clamp-3 leading-snug">{{ item.comment }}</p>
                 <div class="flex justify-between items-end mt-1">
                   <p v-if="item.player_id" class="text-[10px] text-slate-400 font-medium">👤 {{ getPlayerName(item.player_id) }}</p>
-                  </div>
+                  <button 
+                    @click="generateShareImage(item)" 
+                    :disabled="isGeneratingImage"
+                    class="text-xs bg-cyan-100 text-cyan-700 px-3 py-1 rounded-full font-bold border-2 border-cyan-300 hover:bg-cyan-200 active:translate-y-[2px] transition-all"
+                  >
+                    📸 画像でシェア
+                  </button>
+                </div>
               </div>
            </div>
         </div>
@@ -1907,6 +2029,29 @@ const goBackToTop = async () => {
         </template>
       </div>
     </template>
+    
+    
+    <!-- Share Modal -->
+    <div v-if="showShareModal" class="fixed inset-0 z-[200] bg-slate-900/80 flex flex-col items-center justify-center p-4 backdrop-blur-sm transition-opacity" @click.self="showShareModal = false">
+      <div class="bg-white w-full max-w-md rounded-3xl p-5 border-4 border-slate-800 shadow-[0_8px_0_0_#1e293b] flex flex-col gap-4 max-h-[90vh]">
+        <div class="flex justify-between items-center shrink-0">
+          <h3 class="font-black text-xl text-slate-800">SNSでシェア 🎉</h3>
+          <button @click="showShareModal = false" class="w-8 h-8 bg-slate-200 rounded-full flex items-center justify-center font-bold text-slate-600 hover:bg-slate-300">×</button>
+        </div>
+        
+        <div class="overflow-y-auto flex-1 flex flex-col items-center gap-2">
+          <p class="text-xs font-bold text-pink-500 animate-pulse">👇 画像を長押し（または右クリック）で保存！</p>
+          <img :src="shareImageUrl" class="w-full max-w-[280px] rounded-2xl border-4 border-slate-800 shadow-md object-contain" />
+        </div>
+
+        <div class="shrink-0 flex flex-col gap-2 mt-2">
+          <button @click="shareToX" class="w-full py-3 bg-black text-white font-bold rounded-2xl shadow-[0_4px_0_0_#333] active:translate-y-[4px] active:shadow-none transition-all flex items-center justify-center gap-2">
+            <span class="text-xl">𝕏</span> テキストを作ってXを開く
+          </button>
+          <p class="text-[10px] text-slate-500 text-center font-medium leading-tight mt-1">※Xの仕様上、画像は自動で貼り付けられません。<br>保存した画像をXの投稿画面で手動で添付してください🙇‍♂️</p>
+        </div>
+      </div>
+    </div>
     
     <DifficultyModal :isOpen="showDifficultyModal" @close="showDifficultyModal = false" />
     <RulesModal :isOpen="showRulesModal" @close="showRulesModal = false" />
